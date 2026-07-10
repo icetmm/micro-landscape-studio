@@ -1,0 +1,1973 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Micro Landscape Studio · 3D 微观景象创作平台预览</title>
+  <meta name="description" content="3D 微观景象创作平台预览：四季模板、容器切换、素材拖拽与导出分享。" />
+  <style>
+    /* ===================== 基础与变量 ===================== */
+    :root {
+      --background: #f3efe8;
+      --foreground: #1e1f24;
+      --muted: #6d6b6a;
+      --font-sans: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Arial, sans-serif;
+      --font-display: "Georgia", "Times New Roman", "Songti SC", serif;
+
+      /* 默认春季主题色，由 JS 动态切换 */
+      --season-primary: rgba(241, 221, 227, 0.94);
+      --season-secondary: rgba(188, 219, 181, 0.72);
+      --season-glow: rgba(255, 238, 246, 0.86);
+      --season-accent: #f0b4c7;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+
+    a, button { cursor: pointer; }
+
+    h1, h2, h3, .font-display {
+      font-family: var(--font-display);
+      letter-spacing: -0.03em;
+    }
+
+    ::selection { background: rgba(239, 191, 164, 0.45); }
+
+    /* ===================== 滚动条 ===================== */
+    .glass-scrollbar::-webkit-scrollbar { width: 10px; height: 10px; }
+    .glass-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(98, 89, 84, 0.25);
+      border-radius: 999px;
+    }
+    .glass-scrollbar::-webkit-scrollbar-track { background: transparent; }
+
+    /* ===================== 玻璃拟态工具类 ===================== */
+    .glass {
+      background: rgba(255, 255, 255, 0.40);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      -webkit-backdrop-filter: blur(22px);
+      backdrop-filter: blur(22px);
+    }
+    .glass-strong {
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.50);
+      -webkit-backdrop-filter: blur(24px);
+      backdrop-filter: blur(24px);
+    }
+    .glass-soft {
+      background: rgba(255, 255, 255, 0.34);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+    }
+
+    /* ===================== 季节背景层 ===================== */
+    .season-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      transition: background 0.8s ease;
+      background:
+        radial-gradient(circle at 18% 18%, var(--season-glow), transparent 26%),
+        radial-gradient(circle at 82% 16%, rgba(255,255,255,0.64), transparent 18%),
+        linear-gradient(135deg, var(--season-primary), var(--season-secondary));
+    }
+
+    /* ===================== 布局容器 ===================== */
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+    .container-wide { max-width: 1600px; }
+
+    /* ===================== 顶部导航 ===================== */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 20px;
+      background: rgba(255, 255, 255, 0.55);
+      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 18px;
+      color: #18181b;
+    }
+    .brand-dot {
+      width: 28px; height: 28px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #f0b4c7, #8ebf66);
+      box-shadow: 0 6px 16px rgba(15,18,31,0.18);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-link {
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      color: #3f3f46;
+      text-decoration: none;
+      transition: background 0.2s, color 0.2s;
+    }
+    .nav-link:hover { background: rgba(255,255,255,0.7); color: #18181b; }
+    .nav-link.active {
+      background: #18181b;
+      color: #fff;
+    }
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+    }
+
+    /* ===================== 区段标题 ===================== */
+    .section { position: relative; padding: 64px 0; }
+    .section-eyebrow {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      color: #71717a;
+      margin: 0 0 12px;
+    }
+    .section-title {
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 600;
+      color: #18181b;
+      margin: 0 0 14px;
+      line-height: 1.15;
+    }
+    .section-desc {
+      max-width: 640px;
+      font-size: 16px;
+      line-height: 1.7;
+      color: #52525b;
+      margin: 0;
+    }
+
+    /* ===================== Hero 区 ===================== */
+    .hero {
+      position: relative;
+      min-height: 92vh;
+      padding: 24px 16px;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+    }
+    .hero-grid {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      gap: 24px;
+      grid-template-columns: 1fr;
+      align-items: center;
+    }
+    @media (min-width: 1024px) {
+      .hero-grid { grid-template-columns: 1fr 380px; }
+    }
+    .hero-card {
+      border-radius: 40px;
+      padding: 32px;
+      box-shadow: 0 40px 120px rgba(15,18,31,0.14);
+    }
+    .hero-eyebrow {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      color: #52525b;
+      margin: 0 0 24px;
+    }
+    .hero-title {
+      font-size: clamp(36px, 6vw, 68px);
+      font-weight: 600;
+      line-height: 1.08;
+      color: #18181b;
+      margin: 0;
+      max-width: 640px;
+    }
+    .hero-title span { display: block; color: #3f3f46; }
+    .hero-desc {
+      margin: 24px 0 0;
+      max-width: 560px;
+      font-size: 17px;
+      line-height: 1.75;
+      color: #52525b;
+    }
+    .hero-actions {
+      margin-top: 36px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: none;
+      border-radius: 999px;
+      padding: 14px 24px;
+      font-size: 15px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+    }
+    .btn-primary {
+      background: #18181b;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #27272a; transform: translateY(-1px); }
+    .btn-ghost {
+      background: rgba(255,255,255,0.70);
+      border: 1px solid rgba(255,255,255,0.70);
+      color: #3f3f46;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.05);
+    }
+    .btn-ghost:hover { background: #fff; }
+    .btn-arrow {
+      width: 16px; height: 16px;
+      display: inline-block;
+    }
+
+    /* ===================== 季节选择器 ===================== */
+    .season-panel {
+      border-radius: 34px;
+      padding: 20px;
+      box-shadow: 0 34px 90px rgba(15,18,31,0.14);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .new-landscape {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.70);
+      background: rgba(255,255,255,0.68);
+      padding: 16px;
+      text-align: left;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.05);
+      transition: background 0.2s;
+      font-family: var(--font-sans);
+    }
+    .new-landscape:hover { background: #fff; }
+    .new-landscape .plus {
+      border-radius: 999px;
+      background: rgba(24,24,27,0.08);
+      padding: 8px 12px;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .new-landscape .nl-title { font-size: 14px; font-weight: 500; color: #18181b; margin: 0; }
+    .new-landscape .nl-sub { font-size: 12px; color: #71717a; margin: 4px 0 0; }
+
+    .season-list { display: flex; flex-direction: column; gap: 12px; }
+    .season-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.50);
+      background: rgba(255,255,255,0.40);
+      padding: 16px 20px;
+      text-align: left;
+      font-family: var(--font-sans);
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+    .season-item:hover { background: rgba(255,255,255,0.68); }
+    .season-item.active {
+      border-color: #ead7b4;
+      background: rgba(255,255,255,0.82);
+      box-shadow: 0 14px 32px rgba(85,63,28,0.14);
+    }
+    .season-emoji { font-size: 30px; line-height: 1; }
+    .season-label { font-size: 15px; font-weight: 500; color: #18181b; margin: 0; }
+    .season-sub { font-size: 12px; color: #71717a; margin: 4px 0 0; }
+
+    .login-card {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 28px;
+      border: 1px solid rgba(255,255,255,0.65);
+      background: rgba(255,255,255,0.50);
+      padding: 20px 24px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #3f3f46;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.05);
+      transition: background 0.2s;
+      text-decoration: none;
+      font-family: var(--font-sans);
+    }
+    .login-card:hover { background: #fff; }
+
+    /* ===================== 粒子层 ===================== */
+    .particles { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.7);
+      animation: floatUp linear infinite;
+    }
+    @keyframes floatUp {
+      0% { transform: translateY(20px); opacity: 0; }
+      10% { opacity: 0.9; }
+      90% { opacity: 0.9; }
+      100% { transform: translateY(-100vh); opacity: 0; }
+    }
+
+    /* ===================== 工作台预览 ===================== */
+    .studio {
+      position: relative;
+      padding: 28px 16px;
+      z-index: 2;
+    }
+    .studio-grid {
+      max-width: 1600px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 1280px) {
+      .studio-grid { grid-template-columns: 320px minmax(0,1fr) 320px; }
+    }
+    .studio-main {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      border-radius: 40px;
+      padding: 16px;
+      box-shadow: 0 40px 120px rgba(17,20,31,0.12);
+    }
+    .studio-header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      border-radius: 32px;
+      padding: 20px;
+      box-shadow: 0 22px 54px rgba(17,20,31,0.08);
+    }
+    @media (min-width: 768px) {
+      .studio-header { flex-direction: row; align-items: center; justify-content: space-between; }
+    }
+    .studio-header-left { display: flex; align-items: center; gap: 16px; }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px; height: 48px;
+      border-radius: 999px;
+      background: #fff;
+      color: #3f3f46;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+      border: none;
+      transition: transform 0.15s;
+    }
+    .back-btn:hover { transform: translateY(-2px); }
+    .studio-eyebrow {
+      font-size: 12px; font-weight: 600; letter-spacing: 0.3em;
+      text-transform: uppercase; color: #71717a; margin: 0;
+    }
+    .studio-title { font-size: 30px; font-weight: 600; color: #18181b; margin: 4px 0 0; }
+    .studio-sub { font-size: 14px; color: #52525b; margin: 8px 0 0; max-width: 560px; }
+    .meta-chips { display: flex; flex-wrap: wrap; gap: 12px; }
+    .chip {
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.70);
+      background: rgba(255,255,255,0.68);
+      padding: 8px 16px;
+      font-size: 12px;
+      color: #52525b;
+    }
+
+    /* 3D 视口区 */
+    .viewport-wrap {
+      border-radius: 36px;
+      padding: 16px;
+      box-shadow: 0 30px 72px rgba(17,20,31,0.10);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .viewport {
+      position: relative;
+      flex: 1;
+      min-height: 460px;
+      border-radius: 28px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(circle at 50% 70%, var(--season-glow), transparent 40%),
+        linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.15));
+    }
+    .viewport-hint {
+      position: absolute;
+      top: 20px; left: 20px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.55);
+      background: rgba(0,0,0,0.35);
+      color: rgba(255,255,255,0.9);
+      padding: 8px 16px;
+      font-size: 12px;
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+    }
+    .export-btn {
+      position: absolute;
+      top: 20px; right: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.85);
+      border: 1px solid rgba(255,255,255,0.60);
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #18181b;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      transition: background 0.2s, transform 0.1s;
+      font-family: var(--font-sans);
+    }
+    .export-btn:hover { background: #fff; }
+    .export-btn:active { transform: scale(0.96); }
+
+    /* ===================== CSS 3D 容器与景观 ===================== */
+    .stage {
+      position: relative;
+      width: 320px;
+      height: 360px;
+      perspective: 900px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .scene {
+      position: relative;
+      width: 220px;
+      height: 300px;
+      transform-style: preserve-3d;
+      transform: rotateX(8deg) rotateY(-12deg);
+      transition: transform 0.6s ease;
+      animation: sceneBreath 8s ease-in-out infinite;
+    }
+    @keyframes sceneBreath {
+      0%, 100% { transform: rotateX(8deg) rotateY(-12deg); }
+      50% { transform: rotateX(8deg) rotateY(8deg); }
+    }
+
+    /* 玻璃瓶容器 */
+    .container-jar {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 200px; height: 260px;
+      transform: translate(-50%, -50%);
+      border-radius: 90px 90px 40px 40px / 60px 60px 40px 40px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.45), rgba(255,255,255,0.12));
+      border: 1.5px solid rgba(255,255,255,0.6);
+      box-shadow:
+        inset 0 8px 24px rgba(255,255,255,0.5),
+        inset 0 -20px 40px rgba(255,255,255,0.25),
+        0 30px 60px rgba(15,18,31,0.18);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+    .container-jar::before {
+      /* 瓶口环 */
+      content: "";
+      position: absolute;
+      left: 50%; top: -14px;
+      width: 130px; height: 22px;
+      transform: translateX(-50%);
+      border-radius: 40px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.55), rgba(255,255,255,0.2));
+      border: 1.5px solid rgba(255,255,255,0.55);
+      box-shadow: 0 6px 14px rgba(15,18,31,0.12);
+    }
+    .container-jar::after {
+      /* 高光 */
+      content: "";
+      position: absolute;
+      left: 18px; top: 30px;
+      width: 24px; height: 120px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0));
+      filter: blur(2px);
+    }
+
+    /* 长方体容器 */
+    .container-cuboid {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 230px; height: 230px;
+      transform: translate(-50%, -50%);
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.4), rgba(255,255,255,0.1));
+      border: 1.5px solid rgba(255,255,255,0.55);
+      box-shadow:
+        inset 0 8px 24px rgba(255,255,255,0.4),
+        0 30px 60px rgba(15,18,31,0.18);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+    .container-cuboid::after {
+      content: "";
+      position: absolute;
+      left: 14px; top: 14px;
+      width: 20px; height: 100px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0));
+      filter: blur(2px);
+    }
+
+    /* 球体容器 */
+    .container-sphere {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 230px; height: 230px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.6), rgba(255,255,255,0.1) 60%);
+      border: 1.5px solid rgba(255,255,255,0.55);
+      box-shadow:
+        inset 0 8px 30px rgba(255,255,255,0.45),
+        0 30px 60px rgba(15,18,31,0.18);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+
+    /* 半开放台座 */
+    .container-pedestal {
+      position: absolute;
+      left: 50%; top: 60%;
+      width: 230px; height: 60px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(255,255,255,0.5), rgba(255,255,255,0.2));
+      border: 1.5px solid rgba(255,255,255,0.55);
+      box-shadow:
+        inset 0 6px 18px rgba(255,255,255,0.5),
+        0 24px 50px rgba(15,18,31,0.16);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+
+    /* 地面/底盘 */
+    .ground {
+      position: absolute;
+      left: 50%; bottom: 38px;
+      width: 180px; height: 50px;
+      transform: translateX(-50%) rotateX(70deg);
+      border-radius: 50%;
+      background: radial-gradient(ellipse, var(--season-accent), transparent 70%);
+      opacity: 0.5;
+      filter: blur(4px);
+    }
+
+    /* 景观元素 */
+    .items-layer {
+      position: absolute;
+      left: 50%; bottom: 50px;
+      transform: translateX(-50%);
+      width: 180px; height: 200px;
+    }
+    .item {
+      position: absolute;
+      transform-style: preserve-3d;
+      filter: drop-shadow(0 8px 6px rgba(15,18,31,0.18));
+      animation: itemSway 5s ease-in-out infinite;
+    }
+    .item-tree {
+      font-size: 70px;
+      line-height: 1;
+    }
+    .item-shrub { font-size: 44px; line-height: 1; }
+    .item-rock { font-size: 40px; line-height: 1; }
+    .item-figure { font-size: 36px; line-height: 1; }
+    @keyframes itemSway {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-4px) rotate(2deg); }
+    }
+
+    /* ===================== 侧边栏 ===================== */
+    .sidebar {
+      border-radius: 40px;
+      padding: 16px;
+      box-shadow: 0 24px 60px rgba(17,20,31,0.12);
+      align-self: start;
+    }
+    .new-project-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.70);
+      background: rgba(255,255,255,0.70);
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #3f3f46;
+      transition: transform 0.15s, background 0.2s;
+      font-family: var(--font-sans);
+    }
+    .new-project-btn:hover { transform: translateY(-2px); background: #fff; }
+    .project-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto; }
+    .project-card {
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.50);
+      background: rgba(255,255,255,0.44);
+      padding: 12px;
+      transition: background 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .project-card:hover { background: rgba(255,255,255,0.70); }
+    .project-card.active {
+      border-color: #ead7b4;
+      background: rgba(255,255,255,0.82);
+      box-shadow: 0 16px 36px rgba(85,63,28,0.14);
+    }
+    .project-row { display: flex; align-items: center; gap: 12px; }
+    .project-icon {
+      border-radius: 999px;
+      background: rgba(24,24,27,0.08);
+      padding: 6px 10px;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .project-name { font-size: 14px; font-weight: 500; color: #18181b; margin: 0; }
+    .project-bg { font-size: 12px; color: #71717a; margin: 4px 0 0; }
+    .project-foot {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #71717a;
+    }
+    .icon-btn {
+      border-radius: 999px;
+      background: rgba(0,0,0,0.05);
+      border: none;
+      padding: 8px;
+      color: #3f3f46;
+      transition: background 0.2s, color 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-btn:hover { background: rgba(0,0,0,0.1); }
+
+    /* ===================== 控制面板 ===================== */
+    .controls {
+      border-radius: 40px;
+      padding: 16px;
+      box-shadow: 0 24px 60px rgba(17,20,31,0.12);
+      align-self: start;
+      max-height: 540px;
+      overflow-y: auto;
+    }
+    .control-section {
+      border-radius: 28px;
+      padding: 16px;
+      box-shadow: 0 24px 60px rgba(17,20,31,0.12);
+      margin-bottom: 16px;
+    }
+    .control-section:last-child { margin-bottom: 0; }
+    .control-head { display: flex; align-items: center; justify-content: space-between; }
+    .control-title { font-size: 14px; font-weight: 500; color: #18181b; margin: 0; }
+    .control-sub { font-size: 12px; color: #71717a; margin: 4px 0 0; }
+    .control-grid { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .control-btn {
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.45);
+      background: rgba(255,255,255,0.40);
+      padding: 12px;
+      text-align: left;
+      font-family: var(--font-sans);
+      transition: background 0.2s, box-shadow 0.2s;
+      color: #3f3f46;
+    }
+    .control-btn:hover { background: rgba(255,255,255,0.70); }
+    .control-btn.active {
+      border-color: rgba(255,255,255,0.80);
+      background: #fff;
+      color: #18181b;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.08);
+    }
+    .control-btn .ce { font-size: 18px; line-height: 1; }
+    .control-btn .cl { font-size: 12px; font-weight: 500; margin-top: 8px; }
+    .control-btn .cd { font-size: 11px; color: #71717a; margin-top: 4px; }
+    .theme-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      border-radius: 20px; padding: 12px;
+      font-size: 14px; font-family: var(--font-sans);
+      border: 1px solid rgba(255,255,255,0.55);
+      background: rgba(255,255,255,0.60);
+      color: #3f3f46;
+      transition: background 0.2s;
+    }
+    .theme-btn.active.dark { background: #18181b; color: #fff; border-color: #18181b; }
+    .theme-btn.active.light { background: #fff7eb; color: #18181b; border-color: #e1c79f; }
+    .transform-grid { margin-top: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .transform-btn {
+      border-radius: 18px; padding: 12px;
+      font-size: 12px; border: none;
+      background: rgba(255,255,255,0.72);
+      color: #3f3f46;
+      font-family: var(--font-sans);
+      transition: background 0.2s;
+    }
+    .transform-btn:hover { background: #fff; }
+    .transform-btn.active { background: #18181b; color: #fff; }
+
+    /* ===================== 素材浏览器 ===================== */
+    .asset-browser {
+      grid-column: 1 / -1;
+      border-radius: 40px;
+      padding: 16px;
+      box-shadow: 0 24px 60px rgba(17,20,31,0.12);
+    }
+    .asset-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 8px; margin-bottom: 16px;
+    }
+    .asset-title { font-size: 14px; font-weight: 500; color: #18181b; margin: 0; }
+    .asset-sub { font-size: 12px; color: #71717a; margin: 4px 0 0; }
+    .upload-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      border-radius: 999px; background: #18181b; color: #fff;
+      padding: 8px 14px; font-size: 12px; font-weight: 500;
+      border: none; font-family: var(--font-sans);
+      transition: background 0.2s;
+    }
+    .upload-btn:hover { background: #27272a; }
+    .asset-track {
+      border-radius: 28px;
+      border: 1px solid rgba(255,255,255,0.50);
+      background: rgba(255,255,255,0.34);
+      padding: 20px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
+      overflow-x: auto;
+    }
+    .asset-group { display: inline-block; }
+    .asset-group-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.24em;
+      text-transform: uppercase; color: #71717a;
+      margin: 0 0 8px; white-space: nowrap;
+    }
+    .asset-row { display: flex; gap: 8px; }
+    .asset-card {
+      flex: 0 0 auto;
+      width: 128px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.60);
+      background: rgba(255,255,255,0.60);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: grab;
+      transition: transform 0.15s, background 0.2s;
+    }
+    .asset-card:hover { transform: translateY(-2px); background: #fff; }
+    .asset-card:active { cursor: grabbing; }
+    .asset-thumb {
+      width: 100%; height: 80px;
+      border-radius: 14px;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    .asset-name {
+      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #18181b;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    /* ===================== 项目画廊 ===================== */
+    .projects-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 768px) { .projects-grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1200px) { .projects-grid { grid-template-columns: repeat(3, 1fr); } }
+    .project-tile {
+      border-radius: 30px;
+      border: 1px solid rgba(255,255,255,0.50);
+      background: rgba(255,255,255,0.60);
+      padding: 20px;
+      box-shadow: 0 20px 48px rgba(15,18,31,0.08);
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+      display: flex;
+      flex-direction: column;
+    }
+    .project-cover {
+      height: 176px;
+      border-radius: 24px;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      position: relative;
+      overflow: hidden;
+    }
+    .project-cover-fallback {
+      height: 176px;
+      border-radius: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .project-info {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .project-info .pn { font-size: 14px; font-weight: 500; color: #18181b; margin: 0; }
+    .project-info .pm { font-size: 12px; color: #71717a; margin: 4px 0 0; }
+    .project-emoji-chip {
+      border-radius: 999px;
+      background: rgba(0,0,0,0.05);
+      padding: 4px 12px;
+      font-size: 18px;
+    }
+    .project-time {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #71717a;
+    }
+    .project-actions {
+      margin-top: 20px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .pa-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-radius: 18px;
+      padding: 12px;
+      font-size: 12px;
+      font-weight: 500;
+      border: none;
+      font-family: var(--font-sans);
+      transition: background 0.2s;
+    }
+    .pa-edit { background: #18181b; color: #fff; }
+    .pa-edit:hover { background: #27272a; }
+    .pa-copy { background: #fff; color: #3f3f46; }
+    .pa-copy:hover { background: #fafafa; }
+    .pa-delete { background: #fff1f2; color: #e11d48; }
+    .pa-delete:hover { background: #ffe4e6; }
+    .pa-delete:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ===================== 特性区 ===================== */
+    .features-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 768px) { .features-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .features-grid { grid-template-columns: repeat(4, 1fr); } }
+    .feature-card {
+      border-radius: 28px;
+      padding: 24px;
+      border: 1px solid rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.55);
+      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 20px 48px rgba(15,18,31,0.08);
+      transition: transform 0.2s;
+    }
+    .feature-card:hover { transform: translateY(-4px); }
+    .feature-icon {
+      width: 48px; height: 48px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.4));
+      box-shadow: 0 8px 18px rgba(15,18,31,0.1);
+    }
+    .feature-title { font-size: 16px; font-weight: 600; color: #18181b; margin: 0 0 8px; }
+    .feature-desc { font-size: 13px; line-height: 1.7; color: #52525b; margin: 0; }
+
+    /* ===================== 页脚 ===================== */
+    .footer {
+      padding: 40px 16px 28px;
+      text-align: center;
+      color: #71717a;
+      font-size: 13px;
+    }
+    .footer .brand { justify-content: center; margin-bottom: 12px; }
+
+    /* ===================== 模态框 ===================== */
+    .modal-mask {
+      position: fixed; inset: 0; z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(0,0,0,0.4);
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+    }
+    .modal-mask.open { display: flex; }
+    .modal {
+      position: relative;
+      width: 100%;
+      max-width: 420px;
+      border-radius: 32px;
+      border: 1px solid rgba(255,255,255,0.45);
+      padding: 24px;
+      box-shadow: 0 40px 120px rgba(15,18,31,0.2);
+      background: linear-gradient(135deg, rgba(255,255,255,0.85), rgba(255,255,255,0.65));
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+    }
+    .modal-close {
+      position: absolute;
+      right: 20px; top: 20px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.05);
+      border: none;
+      padding: 8px;
+      color: #3f3f46;
+      transition: background 0.2s;
+      display: inline-flex;
+    }
+    .modal-close:hover { background: rgba(0,0,0,0.1); }
+    .modal h2 { font-size: 24px; font-weight: 600; color: #18181b; margin: 0; }
+    .modal p { font-size: 14px; color: #52525b; margin: 8px 0 0; }
+    .icon-picker {
+      margin: 24px 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.60);
+      background: rgba(255,255,255,0.50);
+      padding: 8px;
+    }
+    .icon-pick {
+      width: 40px; height: 40px;
+      border: none;
+      border-radius: 999px;
+      background: transparent;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .icon-pick:hover { background: rgba(255,255,255,0.6); }
+    .icon-pick.active { background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+    .modal-input {
+      width: 100%;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.60);
+      background: rgba(255,255,255,0.70);
+      padding: 16px 20px;
+      font-size: 14px;
+      color: #18181b;
+      outline: none;
+      font-family: var(--font-sans);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .modal-input:focus { border-color: #a1a1aa; background: #fff; }
+    .modal-submit {
+      margin-top: 16px;
+      width: 100%;
+      border: none;
+      border-radius: 20px;
+      background: #18181b;
+      color: #fff;
+      padding: 16px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      transition: background 0.2s;
+    }
+    .modal-submit:hover { background: #27272a; }
+    .modal-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ===================== Toast ===================== */
+    .toast {
+      position: fixed;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 200;
+      border-radius: 20px;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s, transform 0.25s;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    /* ===================== 入场动画 ===================== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ===================== 响应式微调 ===================== */
+    @media (max-width: 1023px) {
+      .studio-grid > .sidebar,
+      .studio-grid > .controls { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===================== 顶部导航 ===================== -->
+  <nav class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      Micro Landscape Studio
+    </div>
+    <div class="nav-links">
+      <a class="nav-link active" href="#hero">首页</a>
+      <a class="nav-link" href="#studio">创作工作台</a>
+      <a class="nav-link" href="#projects">项目</a>
+      <a class="nav-link" href="#features">特性</a>
+    </div>
+  </nav>
+
+  <!-- ===================== Hero 沉浸入口 ===================== -->
+  <section id="hero" class="hero">
+    <div class="season-bg" id="heroBg"></div>
+    <div class="particles" id="particles"></div>
+
+    <div class="hero-grid">
+      <main>
+        <header class="hero-card glass reveal">
+          <p class="hero-eyebrow">3D Micro Landscape Studio</p>
+          <h1 class="hero-title">
+            把照片、季节与容器
+            <span>雕刻成可旋转的微观景象。</span>
+          </h1>
+          <p class="hero-desc">
+            平台内置春夏秋冬默认景观、动态联动背景和可切换容器体系，支持用户上传照片生成元素卡片，进入 3D 工作台继续摆放、导出与分享。
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#studio">
+              进入创作工作台
+              <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+            <a class="btn btn-ghost" href="#projects">查看项目管理</a>
+          </div>
+        </header>
+      </main>
+
+      <aside class="reveal" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="season-panel glass">
+          <button class="new-landscape" onclick="openModal()">
+            <span class="plus">+</span>
+            <span>
+              <span class="nl-title">New Landscape</span>
+              <span class="nl-sub">创建新的微观世界</span>
+            </span>
+          </button>
+          <div class="season-list" id="seasonList">
+            <!-- 由 JS 渲染 -->
+          </div>
+        </div>
+        <a class="login-card" href="#auth">登录并同步你的景观</a>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================== 创作工作台 ===================== -->
+  <section id="studio" class="studio">
+    <div class="container-wide" style="padding:0 16px;">
+      <div class="reveal" style="margin-bottom:24px;">
+        <p class="section-eyebrow">Creative Studio</p>
+        <h2 class="section-title">沉浸式 3D 创作工作台</h2>
+        <p class="section-desc">左侧管理景观与项目，中央 3D 视口可旋转缩放，右侧调节主题、容器与变换，底部素材库支持拖拽放置。</p>
+      </div>
+    </div>
+
+    <div class="studio-grid container-wide" style="padding:0 16px;">
+      <!-- 左侧栏 -->
+      <aside class="sidebar glass-soft reveal">
+        <button class="new-project-btn" onclick="openModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+          新建景观
+        </button>
+        <div class="project-list glass-scrollbar" id="sidebarProjects">
+          <!-- 由 JS 渲染 -->
+        </div>
+      </aside>
+
+      <!-- 中央主视口 -->
+      <main class="studio-main glass reveal">
+        <header class="studio-header glass-strong">
+          <div class="studio-header-left">
+            <button class="back-btn" onclick="scrollToSection('hero')" aria-label="返回">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            </button>
+            <div>
+              <p class="studio-eyebrow">Creative Studio</p>
+              <h3 class="studio-title" id="studioTitle">Spring Awakening</h3>
+              <p class="studio-sub" id="studioSub">樱花、苔藓与晨雾中的柔光瓶中花园</p>
+            </div>
+          </div>
+          <div class="meta-chips">
+            <span class="chip" id="chipBg">背景联动: 樱花林晨雾背景</span>
+            <span class="chip" id="chipContainer">容器: 玻璃瓶</span>
+            <span class="chip" id="chipTheme">主题: 浅色</span>
+          </div>
+        </header>
+
+        <section style="display:flex; flex-direction:column; gap:16px; flex:1;">
+          <div class="viewport-wrap glass-soft reveal">
+            <div class="viewport" id="viewport">
+              <div class="viewport-hint">左右拖动旋转，滚轮缩放</div>
+              <button class="export-btn" onclick="showToast('已导出当前画布为 PNG')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                保存图片
+              </button>
+
+              <!-- CSS 3D 舞台 -->
+              <div class="stage" id="stage">
+                <div class="scene" id="scene">
+                  <div class="ground"></div>
+                  <!-- 容器 -->
+                  <div class="container-jar" id="containerEl"></div>
+                  <!-- 景观元素 -->
+                  <div class="items-layer" id="itemsLayer"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- 右侧控制 -->
+      <aside class="controls glass-soft reveal glass-scrollbar">
+        <div class="control-section glass-strong">
+          <div class="control-head">
+            <div>
+              <p class="control-title">四季模板</p>
+              <p class="control-sub">切换模板时背景同步联动</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 22 22 7 12 2"></polygon><polyline points="2 7 12 12 22 7"></polyline><line x1="12" y1="22" x2="12" y2="12"></line></svg>
+          </div>
+          <div class="control-grid" id="seasonGrid">
+            <!-- 由 JS 渲染 -->
+          </div>
+          <div class="control-grid" style="margin-top:8px;" id="containerGrid">
+            <!-- 由 JS 渲染 -->
+          </div>
+        </div>
+
+        <div class="control-section glass-strong">
+          <div class="control-head">
+            <div>
+              <p class="control-title">主题模式</p>
+              <p class="control-sub">深浅色模式切换</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          </div>
+          <div class="control-grid">
+            <button class="theme-btn" id="themeDark" onclick="setTheme('dark')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+              深色
+            </button>
+            <button class="theme-btn active light" id="themeLight" onclick="setTheme('light')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+              浅色
+            </button>
+          </div>
+        </div>
+
+        <div class="control-section glass-strong">
+          <div class="control-head">
+            <div>
+              <p class="control-title">创作操作</p>
+              <p class="control-sub">可选中元素后微调与变换</p>
+            </div>
+          </div>
+          <div class="transform-grid">
+            <button class="transform-btn active" onclick="setTransform(this,'移动')">移动</button>
+            <button class="transform-btn" onclick="setTransform(this,'旋转')">旋转</button>
+            <button class="transform-btn" onclick="setTransform(this,'缩放')">缩放</button>
+          </div>
+          <div class="control-grid" style="margin-top:8px;">
+            <button class="control-btn" onclick="showToast('已还原模型初始状态')">
+              <div class="ce">↺</div>
+              <div class="cl">还原</div>
+            </button>
+            <button class="control-btn" onclick="showToast('已删除模型')">
+              <div class="ce">🗑</div>
+              <div class="cl" style="color:#e11d48;">删除</div>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 底部素材浏览器 -->
+      <section class="asset-browser glass-soft reveal">
+        <div class="asset-head">
+          <div>
+            <p class="asset-title">素材与照片</p>
+            <p class="asset-sub">拖拽到上方创作视口即可放置</p>
+          </div>
+          <button class="upload-btn" onclick="showToast('已模拟上传文件')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+            上传
+          </button>
+        </div>
+        <div class="asset-track glass-scrollbar" id="assetTrack">
+          <!-- 由 JS 渲染 -->
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ===================== 项目画廊 ===================== -->
+  <section id="projects" class="section" style="background: radial-gradient(circle at top, #fff6e5, transparent 32%), linear-gradient(135deg, #d9e9df, #f2e1d9);">
+    <div class="container">
+      <div class="reveal" style="margin-bottom:32px;">
+        <p class="section-eyebrow">Project Library</p>
+        <h2 class="section-title">我的景观项目</h2>
+        <p class="section-desc">展示默认四季模板与可编辑的自建项目，支持复制、编辑、删除与封面上传。</p>
+      </div>
+
+      <div class="projects-grid" id="projectsGrid">
+        <!-- 由 JS 渲染 -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 特性区 ===================== -->
+  <section id="features" class="section">
+    <div class="container">
+      <div class="reveal" style="margin-bottom:32px; text-align:center;">
+        <p class="section-eyebrow">Core Features</p>
+        <h2 class="section-title">为创作而生的核心能力</h2>
+        <p class="section-desc" style="margin:0 auto;">把"高审美微缩景观展示"与"低门槛 DIY 创作编辑器"结合在同一平台。</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card reveal">
+          <div class="feature-icon">🌸</div>
+          <h3 class="feature-title">四季景观模板</h3>
+          <p class="feature-desc">春之苏醒、夏日绿洲、秋色物语、冬日静谧，切换时背景与氛围同步联动。</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">🔮</div>
+          <h3 class="feature-title">可切换容器体系</h3>
+          <p class="feature-desc">玻璃瓶、长方体、球体、半开放台座，自动适配内部裁切范围与相机构图。</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">🎨</div>
+          <h3 class="feature-title">素材拖拽创作</h3>
+          <p class="feature-desc">内置植物、石块、建筑、动物等精选 3D 模型，拖入视口即可放置与变换。</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">📤</div>
+          <h3 class="feature-title">导出与分享</h3>
+          <p class="feature-desc">一键导出高分辨率 PNG，生成只读分享链接，让作品被更多人看见。</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">🖼️</div>
+          <h3 class="feature-title">照片元素提取</h3>
+          <p class="feature-desc">上传照片自动识别多个主体，生成可拖入的拟 3D 元素卡片入景创作。</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">💡</div>
+          <h3 class="feature-title">灯光与主题</h3>
+          <p class="feature-desc">深浅色模式切换，深色模式启用可拖动灯光工具，调整光照方向与强度。</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">↩️</div>
+          <h3 class="feature-title">撤销与重做</h3>
+          <p class="feature-desc">覆盖添加、删除、复制、移动、旋转、缩放等操作的完整历史记录。</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">📱</div>
+          <h3 class="feature-title">响应式体验</h3>
+          <p class="feature-desc">桌面端完整创作，平板优化触控，手机端浏览与轻编辑，视觉跨端一致。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 页脚 ===================== -->
+  <footer class="footer">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      Micro Landscape Studio
+    </div>
+    <p>3D 微观景象创作平台 · 预览页面（基于项目源码生成）</p>
+    <p style="margin-top:8px; opacity:0.7;">Next.js 16 · React 19 · Three.js · @react-three/fiber · Zustand</p>
+  </footer>
+
+  <!-- ===================== 新建项目模态框 ===================== -->
+  <div class="modal-mask" id="modalMask">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal()" aria-label="关闭">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+      <h2>创建新景观</h2>
+      <p>给你的新微观世界起个名字吧。</p>
+      <div class="icon-picker" id="iconPicker">
+        <!-- 由 JS 渲染 -->
+      </div>
+      <input type="text" class="modal-input" id="modalInput" placeholder="例如：我的春日花园" />
+      <button class="modal-submit" id="modalSubmit" disabled onclick="submitModal()">开始创作</button>
+    </div>
+  </div>
+
+  <!-- ===================== Toast ===================== -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    /* ===================== 数据（源自 lib/data/studio-presets.ts） ===================== */
+    const seasons = [
+      {
+        key: "spring", label: "Spring Awakening", emoji: "🌸",
+        subtitle: "樱花、苔藓与晨雾中的柔光瓶中花园",
+        accent: "#f0b4c7",
+        previewUrl: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20spring%20cherry%20blossom%20miniature%20landscape%20in%20a%20glass%20jar%2C%20soft%20lighting&image_size=square",
+        background: {
+          primary: "rgba(241, 221, 227, 0.94)",
+          secondary: "rgba(188, 219, 181, 0.72)",
+          glow: "rgba(255, 238, 246, 0.86)",
+          vignette: "rgba(104, 74, 83, 0.26)",
+        },
+      },
+      {
+        key: "summer", label: "Summer Oasis", emoji: "🏝️",
+        subtitle: "热带绿洲、澄澈水面与灿烂阳光的收藏容器",
+        accent: "#73d6d4",
+        previewUrl: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20summer%20beach%20oasis%20miniature%20landscape%20in%20a%20glass%20sphere%2C%20soft%20lighting&image_size=square",
+        background: {
+          primary: "rgba(162, 225, 217, 0.95)",
+          secondary: "rgba(121, 191, 108, 0.72)",
+          glow: "rgba(255, 245, 196, 0.78)",
+          vignette: "rgba(39, 76, 90, 0.32)",
+        },
+      },
+      {
+        key: "autumn", label: "Autumn Colors", emoji: "🍁",
+        subtitle: "暖金树林、夕阳石径与木桥构成的陈列景观",
+        accent: "#d6894b",
+        previewUrl: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20autumn%20maple%20forest%20miniature%20landscape%20in%20a%20glass%20cuboid%2C%20soft%20lighting&image_size=square",
+        background: {
+          primary: "rgba(228, 189, 128, 0.95)",
+          secondary: "rgba(179, 116, 62, 0.72)",
+          glow: "rgba(255, 230, 182, 0.82)",
+          vignette: "rgba(90, 43, 21, 0.32)",
+        },
+      },
+      {
+        key: "winter", label: "Winter Stillness", emoji: "❄️",
+        subtitle: "蓝白雪原、冰面与静谧薄雾塑造的玻璃雪域",
+        accent: "#a6cbff",
+        previewUrl: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20winter%20snow%20pine%20miniature%20landscape%20in%20a%20glass%20jar%2C%20soft%20lighting&image_size=square",
+        background: {
+          primary: "rgba(213, 229, 247, 0.94)",
+          secondary: "rgba(167, 194, 233, 0.68)",
+          glow: "rgba(246, 249, 255, 0.88)",
+          vignette: "rgba(53, 72, 108, 0.28)",
+        },
+      },
+    ];
+
+    const containers = [
+      { key: "jar", label: "玻璃瓶", description: "经典收藏型，折射与展示感最强" },
+      { key: "cuboid", label: "长方体", description: "更适合横向构图和建筑陈列" },
+      { key: "sphere", label: "球体", description: "适合中心聚焦和雪景封装" },
+      { key: "pedestal", label: "半开放台座", description: "适合自由排布的大型创作" },
+    ];
+
+    const defaultProjects = [
+      {
+        id: "spring-awakening", title: "Spring Awakening", icon: "🌸",
+        templateSeason: "spring", container: "jar", readOnly: true,
+        backgroundLabel: "樱花林晨雾背景",
+        items: [
+          { type: "tree", emoji: "🌸", cls: "item-tree", x: 50, y: 60, delay: 0 },
+          { type: "tree", emoji: "🌸", cls: "item-tree", x: 20, y: 80, delay: 1.2, size: 0.8 },
+          { type: "lantern", emoji: "🏮", cls: "item-figure", x: 78, y: 85, delay: 0.6 },
+        ],
+      },
+      {
+        id: "summer-oasis", title: "Summer Oasis", icon: "🏝️",
+        templateSeason: "summer", container: "sphere", readOnly: true,
+        backgroundLabel: "热带晴空背景",
+        items: [
+          { type: "tree", emoji: "🌴", cls: "item-tree", x: 30, y: 55, delay: 0 },
+          { type: "tree", emoji: "🌴", cls: "item-tree", x: 70, y: 75, delay: 1, size: 0.85 },
+          { type: "figure", emoji: "🐚", cls: "item-figure", x: 50, y: 90, delay: 0.5 },
+        ],
+      },
+      {
+        id: "autumn-colors", title: "Autumn Colors", icon: "🍁",
+        templateSeason: "autumn", container: "cuboid", readOnly: true,
+        backgroundLabel: "暖金树林背景",
+        items: [
+          { type: "tree", emoji: "🍁", cls: "item-tree", x: 35, y: 55, delay: 0 },
+          { type: "bridge", emoji: "🌉", cls: "item-figure", x: 72, y: 82, delay: 0.8 },
+        ],
+      },
+      {
+        id: "winter-stillness", title: "Winter Stillness", icon: "❄️",
+        templateSeason: "winter", container: "jar", readOnly: true,
+        backgroundLabel: "静雪森林背景",
+        items: [
+          { type: "tree", emoji: "🌲", cls: "item-tree", x: 58, y: 55, delay: 0 },
+          { type: "rock", emoji: "🪨", cls: "item-rock", x: 22, y: 88, delay: 0.7, size: 0.85 },
+          { type: "figure", emoji: "⛄", cls: "item-figure", x: 78, y: 85, delay: 1.1 },
+        ],
+      },
+      {
+        id: "my-first-landscape", title: "My First Landscape", icon: "🌱",
+        templateSeason: "spring", container: "pedestal", readOnly: false,
+        backgroundLabel: "自定义创作背景",
+        items: [
+          { type: "shrub", emoji: "🌿", cls: "item-shrub", x: 30, y: 80, delay: 0, size: 0.8 },
+          { type: "figure", emoji: "🐰", cls: "item-figure", x: 70, y: 82, delay: 0.9, size: 0.9 },
+        ],
+      },
+    ];
+
+    // 素材库（精选，源自 assetLibrary）
+    const assetLibrary = [
+      { id: "cherry", name: "樱树", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20cherry%20blossom%20tree%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "palm", name: "棕榈", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20palm%20tree%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "maple", name: "枫树", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20autumn%20maple%20tree%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "pine", name: "雪松", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20snow%20covered%20pine%20tree%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "shrub", name: "苔藓灌木", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20moss%20shrub%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "flower", name: "地表花簇", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20flower%20cluster%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "rock", name: "苔藓石", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20mossy%20rock%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "bridge", name: "木桥", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20wooden%20arch%20bridge%20miniature%20over%20a%20small%20pond%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "lantern", name: "石灯", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20stone%20lantern%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "rabbit", name: "兔子", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20white%20rabbit%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "snowman", name: "雪人", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20snowman%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+      { id: "windmill", name: "风车房", url: "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=A%20cute%203D%20isometric%20windmill%20house%20miniature%2C%20white%20background%2C%20soft%20lighting&image_size=square" },
+    ];
+
+    const defaultIcons = ["🌱", "🌸", "🌵", "🍄", "🍁", "🌲", "🍀", "🌻"];
+
+    /* ===================== 状态 ===================== */
+    let state = {
+      season: "spring",
+      container: "jar",
+      theme: "light",
+      activeProjectId: "spring-awakening",
+      modalIcon: "🌱",
+    };
+
+    const root = document.documentElement;
+
+    /* ===================== 季节背景切换 ===================== */
+    function applySeasonBg(season) {
+      const s = seasons.find(x => x.key === season) || seasons[0];
+      root.style.setProperty("--season-primary", s.background.primary);
+      root.style.setProperty("--season-secondary", s.background.secondary);
+      root.style.setProperty("--season-glow", s.background.glow);
+      root.style.setProperty("--season-accent", s.accent);
+    }
+
+    /* ===================== 渲染：Hero 季节选择器 ===================== */
+    function renderSeasonList() {
+      const wrap = document.getElementById("seasonList");
+      wrap.innerHTML = seasons.map(s => `
+        <button class="season-item ${s.key === state.season ? "active" : ""}" data-season="${s.key}">
+          <span class="season-emoji">${s.emoji}</span>
+          <span>
+            <span class="season-label">${s.label}</span>
+            <span class="season-sub">${s.subtitle}</span>
+          </span>
+        </button>
+      `).join("");
+      wrap.querySelectorAll(".season-item").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.season = btn.dataset.season;
+          applySeasonBg(state.season);
+          renderSeasonList();
+          // 同步工作台
+          state.activeProjectId = defaultProjects.find(p => p.templateSeason === state.season)?.id || state.activeProjectId;
+          renderSidebar();
+          renderStudio();
+          renderSeasonGrid();
+        });
+      });
+    }
+
+    /* ===================== 渲染：工作台四季 + 容器 ===================== */
+    function renderSeasonGrid() {
+      const grid = document.getElementById("seasonGrid");
+      grid.innerHTML = seasons.map(s => `
+        <button class="control-btn ${s.key === state.season ? "active" : ""}" data-season="${s.key}">
+          <div class="ce">${s.emoji}</div>
+          <div class="cl">${s.label}</div>
+        </button>
+      `).join("");
+      grid.querySelectorAll(".control-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.season = btn.dataset.season;
+          applySeasonBg(state.season);
+          renderSeasonGrid();
+          renderSeasonList();
+          renderStudio();
+        });
+      });
+
+      const cgrid = document.getElementById("containerGrid");
+      cgrid.innerHTML = containers.map(c => `
+        <button class="control-btn ${c.key === state.container ? "active" : ""}" data-container="${c.key}">
+          <div class="cl" style="margin-top:0;">${c.label}</div>
+          <div class="cd">${c.description}</div>
+        </button>
+      `).join("");
+      cgrid.querySelectorAll(".control-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.container = btn.dataset.container;
+          renderSeasonGrid();
+          renderStudio();
+        });
+      });
+    }
+
+    /* ===================== 渲染：侧边栏项目 ===================== */
+    function renderSidebar() {
+      const wrap = document.getElementById("sidebarProjects");
+      const defaults = defaultProjects.filter(p => p.readOnly);
+      const customs = defaultProjects.filter(p => !p.readOnly);
+      let html = "";
+      defaults.forEach(p => {
+        const season = seasons.find(s => s.key === p.templateSeason);
+        html += `
+          <div class="project-card ${p.id === state.activeProjectId ? "active" : ""}" data-id="${p.id}">
+            <div class="project-row">
+              <span class="project-icon">${p.icon || season.emoji}</span>
+              <div>
+                <p class="project-name">${p.title}</p>
+                <p class="project-bg">${p.backgroundLabel}</p>
+              </div>
+            </div>
+            <div class="project-foot">
+              <span>默认模板</span>
+              <button class="icon-btn" title="复制项目" onclick="event.stopPropagation(); showToast('已复制 ${p.title}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+      if (customs.length) {
+        html += `<div style="margin-top:16px; border-radius:24px; border:1px solid rgba(255,255,255,0.5); background:rgba(255,255,255,0.30); padding:8px;">`;
+        html += `<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; font-size:14px; font-weight:500; color:#3f3f46;">我的创作</div>`;
+        customs.forEach(p => {
+          const season = seasons.find(s => s.key === p.templateSeason);
+          html += `
+            <div class="project-card ${p.id === state.activeProjectId ? "active" : ""}" data-id="${p.id}" style="margin-top:8px;">
+              <div class="project-row">
+                <span class="project-icon">${p.icon || season.emoji}</span>
+                <div>
+                  <p class="project-name">${p.title}</p>
+                  <p class="project-bg">${p.backgroundLabel}</p>
+                </div>
+              </div>
+              <div class="project-foot">
+                <span>可编辑项目</span>
+                <span style="display:flex; gap:8px;">
+                  <button class="icon-btn" title="复制" onclick="event.stopPropagation(); showToast('已复制 ${p.title}')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
+                  <button class="icon-btn" title="删除" onclick="event.stopPropagation(); showToast('已删除 ${p.title}')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  </button>
+                </span>
+              </div>
+            </div>
+          `;
+        });
+        html += `</div>`;
+      }
+      wrap.innerHTML = html;
+      wrap.querySelectorAll(".project-card").forEach(card => {
+        card.addEventListener("click", () => {
+          state.activeProjectId = card.dataset.id;
+          const p = defaultProjects.find(x => x.id === state.activeProjectId);
+          if (p) {
+            state.season = p.templateSeason;
+            state.container = p.container;
+            applySeasonBg(state.season);
+          }
+          renderSidebar();
+          renderStudio();
+          renderSeasonGrid();
+          renderSeasonList();
+        });
+      });
+    }
+
+    /* ===================== 渲染：工作台主区 ===================== */
+    function renderStudio() {
+      const project = defaultProjects.find(p => p.id === state.activeProjectId) || defaultProjects[0];
+      const season = seasons.find(s => s.key === state.season) || seasons[0];
+      const containerLabels = { jar: "玻璃瓶", cuboid: "长方体", sphere: "球体", pedestal: "半开放台座" };
+
+      document.getElementById("studioTitle").textContent = project.title;
+      document.getElementById("studioSub").textContent = season.subtitle;
+      document.getElementById("chipBg").textContent = "背景联动: " + project.backgroundLabel;
+      document.getElementById("chipContainer").textContent = "容器: " + (containerLabels[state.container] || "玻璃瓶");
+      document.getElementById("chipTheme").textContent = "主题: " + (state.theme === "dark" ? "深色" : "浅色");
+
+      // 容器样式
+      const containerEl = document.getElementById("containerEl");
+      containerEl.className = "container-" + state.container;
+
+      // 景观元素
+      const itemsLayer = document.getElementById("itemsLayer");
+      itemsLayer.innerHTML = project.items.map(it => {
+        const size = it.size ? it.size : 1;
+        const fontSize = it.cls === "item-tree" ? (70 * size) + "px"
+                       : it.cls === "item-shrub" ? (44 * size) + "px"
+                       : it.cls === "item-rock" ? (40 * size) + "px"
+                       : (36 * size) + "px";
+        return `<div class="item ${it.cls}" style="left:${it.x}%; top:${it.y}%; font-size:${fontSize}; animation-delay:${it.delay}s;">${it.emoji}</div>`;
+      }).join("");
+    }
+
+    /* ===================== 渲染：素材浏览器 ===================== */
+    function renderAssets() {
+      const track = document.getElementById("assetTrack");
+      track.innerHTML = `
+        <div class="asset-group">
+          <p class="asset-group-label">预置素材库</p>
+          <div class="asset-row">
+            ${assetLibrary.map(a => `
+              <div class="asset-card" draggable="true" ondragstart="onAssetDragStart(event, '${a.name}')" ondragend="onAssetDragEnd(event)">
+                <div class="asset-thumb" style="background-image:url('${a.url}');"></div>
+                <p class="asset-name">${a.name}</p>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function onAssetDragStart(e, name) {
+      e.dataTransfer.setData("text/plain", name);
+      e.currentTarget.style.opacity = "0.5";
+    }
+    function onAssetDragEnd(e) {
+      e.currentTarget.style.opacity = "1";
+    }
+
+    /* ===================== 渲染：项目画廊 ===================== */
+    function renderProjectsGrid() {
+      const grid = document.getElementById("projectsGrid");
+      grid.innerHTML = defaultProjects.map(p => {
+        const season = seasons.find(s => s.key === p.templateSeason);
+        return `
+          <article class="project-tile">
+            <div class="project-cover" style="background-image:url('${season.previewUrl}');"></div>
+            <div class="project-info">
+              <div>
+                <p class="pn">${p.title}</p>
+                <p class="pm">${p.readOnly ? "默认只读模板" : "可编辑项目"} · ${season.label}</p>
+              </div>
+              <div class="project-emoji-chip">${season.emoji}</div>
+            </div>
+            <div class="project-time">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              最近更新 ${new Date().toLocaleDateString("zh-CN")}
+            </div>
+            <div class="project-actions">
+              <button class="pa-btn pa-edit" onclick="scrollToSection('studio')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                编辑
+              </button>
+              <button class="pa-btn pa-copy" onclick="showToast('已复制 ${p.title}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                复制
+              </button>
+              <button class="pa-btn pa-delete" ${p.readOnly ? "disabled" : ""} onclick="showToast('已删除 ${p.title}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                删除
+              </button>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    /* ===================== 主题切换 ===================== */
+    function setTheme(mode) {
+      state.theme = mode;
+      const dark = document.getElementById("themeDark");
+      const light = document.getElementById("themeLight");
+      dark.classList.toggle("active", mode === "dark");
+      dark.classList.toggle("dark", mode === "dark");
+      light.classList.toggle("active", mode === "light");
+      light.classList.toggle("light", mode === "light");
+      renderStudio();
+      showToast(mode === "dark" ? "已切换深色模式" : "已切换浅色模式");
+    }
+
+    /* ===================== 变换模式 ===================== */
+    function setTransform(btn, mode) {
+      document.querySelectorAll(".transform-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      showToast("变换模式: " + mode);
+    }
+
+    /* ===================== 模态框 ===================== */
+    function openModal() {
+      document.getElementById("modalMask").classList.add("open");
+      renderIconPicker();
+      const input = document.getElementById("modalInput");
+      input.value = "";
+      document.getElementById("modalSubmit").disabled = true;
+      setTimeout(() => input.focus(), 50);
+    }
+    function closeModal() {
+      document.getElementById("modalMask").classList.remove("open");
+    }
+    function renderIconPicker() {
+      const wrap = document.getElementById("iconPicker");
+      wrap.innerHTML = defaultIcons.map(ic => `
+        <button class="icon-pick ${ic === state.modalIcon ? "active" : ""}" data-icon="${ic}">${ic}</button>
+      `).join("");
+      wrap.querySelectorAll(".icon-pick").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.modalIcon = btn.dataset.icon;
+          renderIconPicker();
+        });
+      });
+    }
+    function submitModal() {
+      const title = document.getElementById("modalInput").value.trim();
+      if (!title) return;
+      showToast("已创建新景观: " + title + " " + state.modalIcon);
+      closeModal();
+    }
+
+    /* ===================== Toast ===================== */
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 2000);
+    }
+
+    /* ===================== 滚动定位 ===================== */
+    function scrollToSection(id) {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
+
+    /* ===================== 视口拖拽旋转 ===================== */
+    (function initViewportDrag() {
+      const viewport = document.getElementById("viewport");
+      const scene = document.getElementById("scene");
+      let dragging = false;
+      let startX = 0;
+      let baseRotY = -12;
+      let currentRotY = -12;
+
+      const onDown = (clientX) => {
+        dragging = true;
+        startX = clientX;
+        baseRotY = currentRotY;
+        scene.style.animation = "none";
+      };
+      const onMove = (clientX) => {
+        if (!dragging) return;
+        const dx = clientX - startX;
+        currentRotY = baseRotY + dx * 0.4;
+        scene.style.transform = `rotateX(8deg) rotateY(${currentRotY}deg)`;
+      };
+      const onUp = () => { dragging = false; };
+
+      viewport.addEventListener("mousedown", (e) => onDown(e.clientX));
+      window.addEventListener("mousemove", (e) => onMove(e.clientX));
+      window.addEventListener("mouseup", onUp);
+
+      viewport.addEventListener("touchstart", (e) => { if (e.touches[0]) onDown(e.touches[0].clientX); }, { passive: true });
+      window.addEventListener("touchmove", (e) => { if (e.touches[0]) onMove(e.touches[0].clientX); }, { passive: true });
+      window.addEventListener("touchend", onUp);
+
+      // 滚轮缩放
+      viewport.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const stage = document.getElementById("stage");
+        let scale = parseFloat(stage.dataset.scale || "1");
+        scale -= e.deltaY * 0.001;
+        scale = Math.max(0.7, Math.min(1.4, scale));
+        stage.dataset.scale = scale;
+        stage.style.transform = `scale(${scale})`;
+      }, { passive: false });
+
+      // 拖放素材
+      viewport.addEventListener("dragover", (e) => { e.preventDefault(); });
+      viewport.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const name = e.dataTransfer.getData("text/plain");
+        if (name) showToast("已放入素材: " + name);
+      });
+    })();
+
+    /* ===================== 粒子 ===================== */
+    function initParticles() {
+      const wrap = document.getElementById("particles");
+      const count = 18;
+      for (let i = 0; i < count; i++) {
+        const p = document.createElement("div");
+        p.className = "particle";
+        const size = 4 + Math.random() * 8;
+        p.style.width = size + "px";
+        p.style.height = size + "px";
+        p.style.left = Math.random() * 100 + "%";
+        p.style.bottom = "-10px";
+        p.style.opacity = 0.3 + Math.random() * 0.4;
+        p.style.animationDuration = (12 + Math.random() * 16) + "s";
+        p.style.animationDelay = (Math.random() * 12) + "s";
+        wrap.appendChild(p);
+      }
+    }
+
+    /* ===================== 入场动画 ===================== */
+    function initReveal() {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.1 });
+      document.querySelectorAll(".reveal").forEach(el => observer.observe(el));
+    }
+
+    /* ===================== 导航高亮 ===================== */
+    function initNavHighlight() {
+      const links = document.querySelectorAll(".nav-link");
+      const sections = ["hero", "studio", "projects", "features"].map(id => document.getElementById(id));
+      window.addEventListener("scroll", () => {
+        const y = window.scrollY + 120;
+        let active = "hero";
+        sections.forEach(sec => {
+          if (sec && sec.offsetTop <= y) active = sec.id;
+        });
+        links.forEach(l => {
+          l.classList.toggle("active", l.getAttribute("href") === "#" + active);
+        });
+      });
+    }
+
+    /* ===================== 模态框交互 ===================== */
+    (function initModalInteractions() {
+      const mask = document.getElementById("modalMask");
+      mask.addEventListener("click", (e) => {
+        if (e.target === mask) closeModal();
+      });
+      const input = document.getElementById("modalInput");
+      input.addEventListener("input", () => {
+        document.getElementById("modalSubmit").disabled = !input.value.trim();
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") submitModal();
+        if (e.key === "Escape") closeModal();
+      });
+    })();
+
+    /* ===================== 初始化 ===================== */
+    function init() {
+      applySeasonBg(state.season);
+      renderSeasonList();
+      renderSeasonGrid();
+      renderSidebar();
+      renderStudio();
+      renderAssets();
+      renderProjectsGrid();
+      initParticles();
+      initReveal();
+      initNavHighlight();
+    }
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>
