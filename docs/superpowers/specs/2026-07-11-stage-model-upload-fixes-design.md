@@ -1,69 +1,69 @@
-# Stage Boundary, Piano Scale, and GLB Upload Fixes
+# 舞台边界、钢琴缩放与 GLB 上传修复设计
 
-## Goal
+## 目标
 
-Fix three studio problems without changing unrelated scene behavior:
+在不改变无关场景行为的前提下修复三个问题：
 
-- The seasonal ground must remain inside the visible glass container boundary.
-- The autumn preset piano must appear approximately three times its current visual size while remaining floor-aligned.
-- Uploaded GLB models must be recognized as 3D assets and remain draggable from the uploaded-assets panel onto the stage.
+- 季节地面必须始终位于可见玻璃容器边界以内。
+- 秋季预设中的钢琴视觉尺寸调整为当前的约三倍，同时保持贴合地面。
+- 上传的 GLB 模型必须被识别为三维资源，并且能够从“已上传素材”面板拖到舞台上。
 
-## Architecture
+## 架构
 
-Keep container geometry measurements in `lib/studio-geometry.ts` so rendering and drag constraints share one source of truth. Keep file classification in a small pure helper that converts a browser `File` into the correct `LibraryAsset` shape. Scene rendering continues to dispatch by `ProjectItem.kind`, with uploaded models using the existing `Model3D` and `useGLTF` path.
+将容器几何尺寸集中在 `lib/studio-geometry.ts`，让渲染和拖放约束共享同一份几何配置。把文件分类封装为一个小型纯函数，负责将浏览器 `File` 转换为正确的 `LibraryAsset` 数据。场景仍然根据 `ProjectItem.kind` 选择渲染方式；上传模型继续复用现有的 `Model3D` 和 `useGLTF` 加载链路。
 
-## Container Ground Boundary
+## 容器地面边界
 
-Add a container-specific ground footprint helper. `SeasonalFloor` will consume this helper instead of embedding its own radii and dimensions. The jar footprint will use a conservative radius below the inner glass profile at the configured floor height, removing the green crescent visible outside the jar. Existing cuboid, sphere, and pedestal dimensions will remain visually unchanged unless the shared configuration exposes an existing mismatch.
+新增按容器类型返回地面轮廓的辅助函数。`SeasonalFloor` 使用该函数，不再在组件内部硬编码半径和尺寸。玻璃瓶地面使用一个小于当前地板高度处玻璃内壁的安全半径，从而消除玻璃瓶外侧可见的绿色月牙边。除非共享配置暴露出已有尺寸错误，否则长方体、球体和底座的视觉尺寸保持不变。
 
-Drag clamping remains separate from the visible ground footprint because an item's origin can safely approach a different boundary than a filled ground mesh. Both values will nevertheless live in the same geometry module and be covered by unit tests.
+拖放限制与可见地面轮廓保持为两个独立概念，因为物体原点能够安全到达的边界不一定等于填充地面网格的边界。不过，这两组数值都会集中在同一个几何模块中，并由单元测试覆盖。
 
-## Piano Scale
+## 钢琴缩放
 
-The piano is currently scaled twice: `item.scale` is applied inside `Model3D`, and `item.scale3` is applied by `SceneItemNode`. The autumn preset supplies `0.6` to both, producing an effective factor of `0.36` after model normalization.
+钢琴当前被缩放了两次：`Model3D` 内部应用 `item.scale`，`SceneItemNode` 又应用 `item.scale3`。秋季预设同时给两者提供了 `0.6`，因此模型归一化后的实际缩放系数为 `0.36`。
 
-The preset will use one intentional uniform scale path and a value chosen to produce approximately three times the current visual dimensions. Its position and rotation remain unchanged unless visual verification shows that the enlarged bounding box crosses the cuboid wall; in that case only its horizontal position will be minimally adjusted. The existing bottom-offset normalization continues to keep the piano on the floor.
+预设将改为只使用一条明确的统一缩放路径，并设置为使钢琴视觉尺寸达到当前约三倍的数值。钢琴的位置和旋转保持不变；如果视觉验证发现放大后的包围盒穿过长方体侧壁，只对其水平位置进行最小调整。现有的底部偏移归一化逻辑继续负责让钢琴贴合地面。
 
-## Upload Classification and Drag Flow
+## 上传分类与拖放流程
 
-Uploaded files will be classified case-insensitively:
+上传文件按扩展名分类，且不区分大小写：
 
-- `.glb` and `.gltf`: `kind: "model-3d"`, blob URL assigned to `modelUrl`, `sourceType: "upload"`.
-- Supported raster images: `kind: "upload-plane"`, blob URL assigned to `previewUrl`, `sourceType: "upload"`.
-- Unsupported extensions: rejected with a user-visible toast instead of being added as a broken image plane.
+- `.glb` 和 `.gltf`：设置 `kind: "model-3d"`，将 Blob URL 写入 `modelUrl`，并设置 `sourceType: "upload"`。
+- 支持的位图格式：设置 `kind: "upload-plane"`，将 Blob URL 写入 `previewUrl`，并设置 `sourceType: "upload"`。
+- 不支持的扩展名：拒绝添加，并显示用户可见的提示，而不是创建损坏的图片平面。
 
-The uploaded-assets browser and existing drag payload remain unchanged because they already pass the complete `LibraryAsset` object. `addItemFromAsset` will preserve `kind`, `modelUrl`, and `sourceType`, allowing `ItemMesh` to select `Model3D` and `useGLTF` after the drop.
+“已上传素材”面板和现有拖放载荷不需要改动，因为它们已经传递完整的 `LibraryAsset` 对象。`addItemFromAsset` 将保留 `kind`、`modelUrl` 和 `sourceType`，使拖放后的 `ItemMesh` 能选择 `Model3D`，随后由 `useGLTF` 加载模型。
 
-Blob URLs are session-scoped. Persisted stale blob-backed assets must not crash the whole canvas: existing item error isolation remains in place, and invalid restored upload entries may render the current error fallback. Durable cross-refresh binary storage is explicitly outside this fix.
+Blob URL 只在当前浏览器会话中有效。持久化数据中失效的 Blob 资源不能导致整个画布崩溃：保留现有的物体级错误隔离，恢复后无法加载的上传资源可以显示当前错误占位模型。跨刷新持久化二进制文件明确不属于本次修复范围。
 
-## Error Handling
+## 错误处理
 
-- A mixed upload selection adds supported files and reports how many unsupported files were skipped.
-- A GLB parser/load failure is contained to that item by the scene item error boundary.
-- Empty file selections remain a no-op.
-- Extension checks are case-insensitive.
+- 混合选择多个文件时，添加其中受支持的文件，并提示跳过了多少个不支持的文件。
+- GLB 解析或加载失败时，由场景物体错误边界将故障限制在单个物体内。
+- 未选择文件时不执行任何操作。
+- 文件扩展名检查不区分大小写。
 
-## Testing
+## 测试
 
-Use Vitest unit tests for pure behavior:
+使用 Vitest 对纯逻辑编写单元测试：
 
-- Jar ground footprint is smaller than its safe inner boundary and differs from the drag clamp radius.
-- `.glb`, uppercase `.GLB`, `.gltf`, and supported image files produce the correct asset kind and URL field.
-- Unsupported files are rejected.
-- The autumn piano preset has a single effective scale approximately three times the previous `0.36` factor.
+- 玻璃瓶地面轮廓小于其安全内壁边界，并且与拖放限制半径不同。
+- `.glb`、大写 `.GLB`、`.gltf` 和支持的图片文件能够生成正确的资源类型和 URL 字段。
+- 不支持的文件会被拒绝。
+- 秋季钢琴预设只使用一次有效缩放，最终系数约为原先 `0.36` 的三倍。
 
-Then run the focused tests, the complete test suite, TypeScript/ESLint checks, and the production build. Finally inspect the jar scene, autumn piano scene, and an uploaded GLB drag in the browser.
+随后依次运行聚焦测试、完整测试套件、TypeScript/ESLint 检查和生产构建。最后在浏览器中检查玻璃瓶场景、秋季钢琴场景，以及上传 GLB 后拖到舞台的完整流程。
 
-## Success Criteria
+## 验收标准
 
-- No green ground is visible outside the jar glass at the demonstrated camera angle or during normal orbiting.
-- The autumn piano appears approximately three times larger than in the supplied screenshot and remains on the stage floor.
-- Selecting a GLB creates an uploaded 3D asset; dragging it to the stage loads the model rather than an image plane or unknown fallback.
-- Invalid or unsupported uploads do not crash the studio.
-- Existing automated checks and the Next.js production build pass.
+- 在截图所示相机角度和正常旋转查看过程中，玻璃瓶外侧均看不到绿色地面。
+- 秋季钢琴的视觉尺寸约为用户截图中的三倍，并保持在舞台地面上。
+- 选择 GLB 后会创建一个已上传的三维资源；将它拖到舞台时加载模型，而不是图片平面或未知占位物。
+- 无效或不受支持的上传文件不会导致工作室崩溃。
+- 现有自动化检查和 Next.js 生产构建均通过。
 
-## Non-Goals
+## 非目标
 
-- Persisting uploaded binary files across browser restarts.
-- Automatic semantic sizing for every possible third-party model.
-- Redesigning the asset browser or container shell.
+- 在浏览器重启后继续保存上传的二进制文件。
+- 为任意第三方模型实现自动语义尺寸判断。
+- 重新设计素材浏览器或容器外壳。
