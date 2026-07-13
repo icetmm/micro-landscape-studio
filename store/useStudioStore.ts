@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -31,6 +31,7 @@ interface StudioState {
   cloneProject: (projectId: string) => string | null;
   deleteProject: (projectId: string) => void;
   updateProjectTitle: (projectId: string, title: string) => void;
+  updateProjectIcon: (projectId: string, icon: string) => void;
   updateProjectCover: (projectId: string, coverUrl: string) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setSeason: (season: SeasonKey) => void;
@@ -38,6 +39,7 @@ interface StudioState {
   setLight: (light: Partial<LightSettings>) => void;
   addItemFromAsset: (asset: LibraryAsset, position?: [number, number, number]) => void;
   updateItemTransform: (id: string, position: [number, number, number], rotation: [number, number, number], scale3?: [number, number, number]) => void;
+  constrainItemPosition: (id: string, position: [number, number, number]) => void;
   resetItemTransform: (id: string) => void;
   nudgeSelectedItem: (delta: [number, number, number]) => void;
   removeSelectedItem: () => void;
@@ -45,6 +47,7 @@ interface StudioState {
   setSelectedItemId: (itemId: string | null) => void;
   addUploadedAssets: (assets: LibraryAsset[]) => void;
   hydrateSharedProject: (payload: SharedPayload) => void;
+  hasInitializedDefaultCustomProjects: boolean;
 }
 
 function now() {
@@ -152,7 +155,7 @@ function updateActiveProject(
   return withHistory(
     state,
     state.projects.map((project) =>
-      project.id === state.activeProjectId ? updater(project) : project,
+      project.id === state.activeProjectId ? { ...updater(project), isUnmodifiedDefault: false } : project,
     ),
   );
 }
@@ -167,6 +170,7 @@ export const useStudioStore = create<StudioState>()(
       uploadedAssets: [],
       activeProjectId: "my-first-landscape",
       selectedItemId: null,
+      hasInitializedDefaultCustomProjects: true,
       light: {
         intensity: 1.05,
         azimuth: 0.24,
@@ -218,6 +222,7 @@ export const useStudioStore = create<StudioState>()(
           title: `${project.title} Copy`,
           source: "template-copy",
           readOnly: false,
+          isUnmodifiedDefault: false,
           items: project.items.map((item) => ({
             ...item,
             id: `${item.id}-${Math.random().toString(36).slice(2, 5)}`,
@@ -258,7 +263,16 @@ export const useStudioStore = create<StudioState>()(
         set((state) => ({
           projects: state.projects.map((project) =>
             project.id === projectId && !project.readOnly
-              ? { ...project, title, updatedAt: now() }
+              ? { ...project, title, updatedAt: now(), isUnmodifiedDefault: false }
+              : project,
+          ),
+        }));
+      },
+      updateProjectIcon: (projectId, icon) => {
+        set((state) => ({
+          projects: state.projects.map((project) =>
+            project.id === projectId && !project.readOnly
+              ? { ...project, icon, updatedAt: now(), isUnmodifiedDefault: false }
               : project,
           ),
         }));
@@ -267,7 +281,7 @@ export const useStudioStore = create<StudioState>()(
         set((state) => ({
           projects: state.projects.map((project) =>
             project.id === projectId
-              ? { ...project, coverUrl, updatedAt: now() }
+              ? { ...project, coverUrl, updatedAt: now(), isUnmodifiedDefault: false }
               : project,
           ),
         }));
@@ -278,7 +292,7 @@ export const useStudioStore = create<StudioState>()(
             state,
             state.projects.map((project) =>
               project.id === state.activeProjectId
-                ? { ...project, themeMode: mode, updatedAt: now() }
+                ? { ...project, themeMode: mode, updatedAt: now(), isUnmodifiedDefault: false }
                 : project,
             ),
           ),
@@ -329,7 +343,7 @@ export const useStudioStore = create<StudioState>()(
               item.id === id
                 ? {
                     ...item,
-                    position: withFloorY(position, project.container),
+                    position: [...position],
                     rotation: [...rotation],
                     scale3: scale3 ? [...scale3] : item.scale3,
                   }
@@ -338,6 +352,29 @@ export const useStudioStore = create<StudioState>()(
             updatedAt: now(),
           })),
         );
+      },
+      constrainItemPosition: (id, position) => {
+        set((state) => {
+          const activeProject = findProject(state);
+          if (!activeProject) return state;
+
+          return {
+            projects: state.projects.map((project) =>
+              project.id === state.activeProjectId
+                ? {
+                    ...project,
+                    isUnmodifiedDefault: false,
+                    items: project.items.map((item) =>
+                      item.id === id
+                        ? { ...item, position: [...position] }
+                        : item,
+                    ),
+                    updatedAt: now(),
+                  }
+                : project,
+            ),
+          };
+        });
       },
       resetItemTransform: (id) => {
         set((state) =>
@@ -367,10 +404,11 @@ export const useStudioStore = create<StudioState>()(
               item.id === state.selectedItemId
                 ? {
                     ...item,
-                    position: withFloorY(
-                      [item.position[0] + delta[0], item.position[1] + delta[1], item.position[2] + delta[2]],
-                      project.container,
-                    ),
+                    position: [
+                      item.position[0] + delta[0],
+                      item.position[1] + delta[1],
+                      item.position[2] + delta[2],
+                    ],
                   }
                 : item,
             ),
@@ -444,10 +482,16 @@ export const useStudioStore = create<StudioState>()(
     {
       name: "micro-landscape-studio",
       partialize: (state) => ({
-        projects: state.projects.filter((project) => project.source !== "system"),
+        projects: state.projects.filter((project) => project.source !== "system").map((project) => ({
+          ...project,
+          // Exclude uploaded items from persistence to avoid broken blob URLs after reload
+          items: project.items.filter((item) => item.sourceType !== "upload")
+        })),
         activeProjectId: state.activeProjectId,
-        uploadedAssets: state.uploadedAssets,
+        // Exclude uploadedAssets to avoid broken blob URLs after reload
+        uploadedAssets: [],
         light: state.light,
+        hasInitializedDefaultCustomProjects: state.hasInitializedDefaultCustomProjects,
       }),
       merge: (persistedState: unknown, currentState) => {
         const state = persistedState as Partial<StudioState>;
@@ -455,8 +499,16 @@ export const useStudioStore = create<StudioState>()(
           return { ...currentState, ...state };
         }
 
-        const customProjects = state.projects.filter((project) => project.source !== "system").map(snapProjectItemsToFloor);
+        let customProjects = state.projects.filter((project) => project.source !== "system").map(snapProjectItemsToFloor);
         const systemProjects = defaultProjects.filter((project) => project.source === "system").map(snapProjectItemsToFloor);
+
+        let hasInitializedDefaultCustomProjects = state.hasInitializedDefaultCustomProjects ?? false;
+        
+        if (!hasInitializedDefaultCustomProjects) {
+          const defaultCustomProjects = defaultProjects.filter((project) => project.source === "custom").map(snapProjectItemsToFloor);
+          customProjects = [...defaultCustomProjects, ...customProjects];
+          hasInitializedDefaultCustomProjects = true;
+        }
 
         return {
           ...currentState,
@@ -464,6 +516,7 @@ export const useStudioStore = create<StudioState>()(
           history: [],
           canUndo: false,
           projects: [...systemProjects, ...customProjects],
+          hasInitializedDefaultCustomProjects,
         };
       },
     },

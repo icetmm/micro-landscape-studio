@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   LampDesk,
@@ -8,6 +8,10 @@ import {
   SunMedium,
   Trash2,
   Undo2,
+  Move,
+  Rotate3D,
+  Scaling,
+  Download,
 } from "lucide-react";
 
 import { containers, seasons } from "@/lib/data/studio-presets";
@@ -34,6 +38,7 @@ interface StudioControlsProps {
   onReset: () => void;
   onDelete: () => void;
   onUndo: () => void;
+  onExport: () => void;
 }
 
 export function StudioControls({
@@ -55,71 +60,71 @@ export function StudioControls({
   onReset,
   onDelete,
   onUndo,
+  onExport,
 }: StudioControlsProps) {
   return (
-    <div className="space-y-4">
-      <section className="rounded-[28px] border border-white/45 bg-white/58 p-4 shadow-[0_24px_60px_rgba(17,20,31,0.12)] backdrop-blur-2xl">
+    <div className="flex h-full flex-col gap-4">
+      <section className="rounded-[24px] border border-white/45 bg-white/58 p-4 shadow-[0_24px_60px_rgba(17,20,31,0.12)] backdrop-blur-2xl">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-zinc-900">四季模板</p>
-            <p className="mt-1 text-xs text-zinc-500">切换模板时背景同步联动</p>
           </div>
           <Layers3 className="h-4 w-4 text-zinc-500" />
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-3">
           {seasons.map((season) => (
             <button
               key={season.key}
               type="button"
               onClick={() => onSetSeason(season.key)}
               disabled={!canEdit}
-              className={`rounded-[20px] border px-3 py-3 text-left transition ${
+              className={`rounded-[16px] border px-4 py-3.5 text-center transition ${
                 activeSeason === season.key
-                  ? "border-white/80 bg-white text-zinc-900 shadow-[0_12px_28px_rgba(0,0,0,0.08)]"
+                  ? "border-white/80 bg-white text-zinc-900 shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
                   : "border-white/45 bg-white/40 text-zinc-700 hover:bg-white/70"
               } ${!canEdit ? "cursor-not-allowed opacity-60" : ""}`}
             >
-              <div className="text-lg">{season.emoji}</div>
-              <div className="mt-2 text-xs font-medium">{season.label}</div>
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-2xl leading-none">{season.emoji}</span>
+                <span className="text-sm font-medium leading-snug">{season.label}</span>
+              </div>
             </button>
           ))}
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-2 gap-3">
           {containers.map((container) => (
             <button
               key={container.key}
               type="button"
               onClick={() => onSetContainer(container.key)}
               disabled={!canEdit}
-              className={`rounded-[18px] border px-3 py-2 text-left text-xs transition ${
+              className={`rounded-[16px] border px-3 py-3 text-center text-sm transition ${
                 activeContainer === container.key
-                  ? "border-[#e5d3b2] bg-[#fff8ef]"
-                  : "border-white/45 bg-white/35 hover:bg-white/60"
+                  ? "border-white/80 bg-white text-zinc-900 shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
+                  : "border-white/45 bg-white/35 text-zinc-700 hover:bg-white/60"
               } ${!canEdit ? "cursor-not-allowed opacity-60" : ""}`}
             >
-              <p className="font-medium text-zinc-900">{container.label}</p>
-              <p className="mt-1 text-zinc-500">{container.description}</p>
+              <p className="font-medium">{container.label}</p>
             </button>
           ))}
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-white/45 bg-white/58 p-4 shadow-[0_24px_60px_rgba(17,20,31,0.12)] backdrop-blur-2xl">
+      <section className="rounded-[24px] border border-white/45 bg-white/58 p-4 shadow-[0_24px_60px_rgba(17,20,31,0.12)] backdrop-blur-2xl">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-zinc-900">主题模式</p>
-            <p className="mt-1 text-xs text-zinc-500">深浅色模式切换</p>
           </div>
           <LampDesk className="h-4 w-4 text-zinc-500" />
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => onThemeChange("dark")}
-            className={`flex items-center justify-center gap-2 rounded-[20px] border px-3 py-3 text-sm transition ${
+            className={`flex items-center justify-center gap-2 rounded-[16px] border px-3 py-3 text-sm transition ${
               themeMode === "dark"
-                ? "border-zinc-950 bg-zinc-950 text-white"
-                : "border-white/55 bg-white/60 text-zinc-700"
+                ? "border-zinc-800 bg-zinc-900 text-white shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
+                : "border-white/55 bg-white/60 text-zinc-700 hover:bg-white/70"
             }`}
           >
             <MoonStar className="h-4 w-4" />
@@ -128,10 +133,10 @@ export function StudioControls({
           <button
             type="button"
             onClick={() => onThemeChange("light")}
-            className={`flex items-center justify-center gap-2 rounded-[20px] border px-3 py-3 text-sm transition ${
+            className={`flex items-center justify-center gap-2 rounded-[16px] border px-3 py-3 text-sm transition ${
               themeMode === "light"
-                ? "border-[#e1c79f] bg-[#fff7eb] text-zinc-900"
-                : "border-white/55 bg-white/60 text-zinc-700"
+                ? "border-white/80 bg-white text-zinc-900 shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
+                : "border-white/55 bg-white/60 text-zinc-700 hover:bg-white/70"
             }`}
           >
             <SunMedium className="h-4 w-4" />
@@ -140,89 +145,88 @@ export function StudioControls({
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-white/45 bg-white/58 p-4 shadow-[0_24px_60px_rgba(17,20,31,0.12)] backdrop-blur-2xl">
+      <section className="rounded-[24px] border border-white/45 bg-white/58 p-4 shadow-[0_24px_60px_rgba(17,20,31,0.12)] backdrop-blur-2xl">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-zinc-900">创作操作</p>
-            <p className="mt-1 text-xs text-zinc-500">选中元素后微调与变换</p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-4 grid grid-cols-3 gap-3">
           <button
             type="button"
             disabled={!canEdit || !hasSelection}
             onClick={() => onTransformModeChange("translate")}
-            className={`rounded-[18px] px-3 py-3 text-xs transition ${
+            title="移动"
+            className={`flex justify-center rounded-[16px] px-3 py-3 transition ${
               transformMode === "translate"
                 ? "bg-zinc-950 text-white"
                 : "bg-white/72 text-zinc-700 hover:bg-white"
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
-            移动
+            <Move className="h-5 w-5" />
           </button>
           <button
             type="button"
             disabled={!canEdit || !hasSelection}
             onClick={() => onTransformModeChange("rotate")}
-            className={`rounded-[18px] px-3 py-3 text-xs transition ${
+            title="旋转"
+            className={`flex justify-center rounded-[16px] px-3 py-3 transition ${
               transformMode === "rotate"
                 ? "bg-zinc-950 text-white"
                 : "bg-white/72 text-zinc-700 hover:bg-white"
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
-            旋转
+            <Rotate3D className="h-5 w-5" />
           </button>
           <button
             type="button"
             disabled={!canEdit || !hasSelection}
             onClick={() => onTransformModeChange("scale")}
-            className={`rounded-[18px] px-3 py-3 text-xs transition ${
+            title="缩放"
+            className={`flex justify-center rounded-[16px] px-3 py-3 transition ${
               transformMode === "scale"
                 ? "bg-zinc-950 text-white"
                 : "bg-white/72 text-zinc-700 hover:bg-white"
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
-            缩放
+            <Scaling className="h-5 w-5" />
           </button>
         </div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-3">
           <button
             type="button"
             disabled={!canUndo}
             title="撤销上一步"
             onClick={onUndo}
-            className="flex items-center justify-center gap-1.5 rounded-[18px] border border-white/60 bg-white/72 px-3 py-2 text-xs text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center justify-center rounded-[16px] border border-white/60 bg-white/72 px-3 py-3 text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Undo2 className="h-3.5 w-3.5" />
-            撤销
+            <Undo2 className="h-4 w-4" />
           </button>
           <button
             type="button"
             disabled={!canEdit || !hasSelection}
-            title="还原位置、方向和大小"
+            title="还原"
             onClick={onReset}
-            className="flex items-center justify-center gap-1.5 rounded-[18px] border border-white/60 bg-white/72 px-3 py-2 text-xs text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center justify-center rounded-[16px] border border-white/60 bg-white/72 px-3 py-3 text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            还原
+            <RotateCcw className="h-4 w-4" />
           </button>
           <button
             type="button"
             disabled={!canEdit || !hasSelection}
-            title="删除模型"
+            title="删除"
             onClick={onDelete}
-            className="flex items-center justify-center gap-1.5 rounded-[18px] border border-red-200/60 bg-red-50/70 px-3 py-2 text-xs text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center justify-center rounded-[16px] border border-red-200/60 bg-red-50/70 px-3 py-3 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Trash2 className="h-3.5 w-3.5" />
-            删除
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <button
             type="button"
             disabled={!canEdit || !hasSelection}
             onClick={() => onTransformSpaceChange(transformSpace === "local" ? "world" : "local")}
-            className={`rounded-[18px] border px-3 py-2 text-xs transition ${
+            className={`rounded-[16px] border px-3 py-3 text-xs transition ${
               transformSpace === "local"
                 ? "border-white/60 bg-white/72 text-zinc-800"
                 : "border-transparent bg-white/40 text-zinc-600 hover:bg-white/60"
@@ -234,7 +238,7 @@ export function StudioControls({
             type="button"
             disabled={!canEdit || !hasSelection}
             onClick={() => onSnapChange(!snapEnabled)}
-            className={`rounded-[18px] border px-3 py-2 text-xs transition ${
+            className={`rounded-[16px] border px-3 py-3 text-xs transition ${
               snapEnabled
                 ? "border-white/60 bg-white/72 text-zinc-800"
                 : "border-transparent bg-white/40 text-zinc-600 hover:bg-white/60"
@@ -244,6 +248,17 @@ export function StudioControls({
           </button>
         </div>
       </section>
+
+      {/* 保存图片按钮（固定在底部） */}
+      <div className="mt-auto shrink-0">
+        <button
+          onClick={onExport}
+          className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-zinc-950 py-4 text-[15px] font-medium text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-zinc-800 hover:shadow-2xl active:translate-y-0"
+        >
+          <Download className="h-5 w-5" />
+          保存图片
+        </button>
+      </div>
     </div>
   );
 }

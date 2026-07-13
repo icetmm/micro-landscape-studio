@@ -98,6 +98,7 @@ export interface StudioProject {
   backgroundLabel: string;
   themeMode: ThemeMode;
   readOnly: boolean;
+  isUnmodifiedDefault?: boolean;
   items: ProjectItem[];
   updatedAt: string;
 }

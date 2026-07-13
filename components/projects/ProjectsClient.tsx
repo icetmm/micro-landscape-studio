@@ -7,7 +7,7 @@ import { seasons } from "@/lib/data/studio-presets";
 import { useStudioStore } from "@/store/useStudioStore";
 
 export function ProjectsClient() {
-  const { projects, cloneProject, deleteProject, updateProjectCover } = useStudioStore();
+  const { projects, cloneProject, deleteProject, updateProjectCover, activeProjectId } = useStudioStore();
 
   const handleUploadCover = (projectId: string, files: FileList | null) => {
     if (!files?.length) return;
@@ -22,7 +22,7 @@ export function ProjectsClient() {
         <div className="flex flex-col gap-4 rounded-[32px] border border-white/50 bg-white/62 p-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href="/"
+              href={`/studio/${activeProjectId}`}
               className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white text-zinc-800 shadow-[0_10px_24px_rgba(0,0,0,0.08)] transition hover:-translate-y-0.5"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -41,7 +41,7 @@ export function ProjectsClient() {
         </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {projects.map((project) => {
+          {projects.filter(project => !project.isUnmodifiedDefault).map((project) => {
             const season = seasons.find((entry) => entry.key === project.templateSeason);
             return (
               <article

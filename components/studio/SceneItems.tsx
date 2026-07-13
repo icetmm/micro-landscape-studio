@@ -1,12 +1,35 @@
-﻿"use client";
+"use client";
 
 import { Billboard, useTexture, useGLTF, TransformControls } from "@react-three/drei";
-import { useMemo, Suspense, useRef, useLayoutEffect } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useMemo, Suspense, useRef, useLayoutEffect, Component, ReactNode, useState, useEffect } from "react";
 import * as THREE from "three";
 import { useStudioStore } from "@/store/useStudioStore";
-import { getContainerFloorY } from "@/lib/studio-geometry";
+import { getContainerFloorY, getContainerFloorGeometry, clampBoundingBoxToContainer } from "@/lib/studio-geometry";
 
 import type { ProjectItem, SeasonKey, ContainerKey } from "@/lib/types";
+
+class ItemErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.warn("Item load error:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || null;
+    }
+    return this.props.children;
+  }
+}
 
 interface SceneItemsProps {
   items: ProjectItem[];
@@ -23,19 +46,20 @@ function SeasonalFloor({ season, container }: { season: SeasonKey, container: Co
   const palette = {
     spring: { ground: "#8db36f", detail: "#7db17c", water: "#74bfd0" },
     summer: { ground: "#76c57a", detail: "#5ea75f", water: "#6ac7df" },
-    autumn: { ground: "#b58346", detail: "#d49d4d", water: "#8bb7c2" },
+    autumn: { ground: "#FF843B", detail: "#d49d4d", water: "#8bb7c2" },
     winter: { ground: "#eef4fb", detail: "#cfdded", water: "#a0c6e8" },
   }[season];
 
   const yPos = getContainerFloorY(container);
+  const geometry = getContainerFloorGeometry(container);
 
   return (
     <group>
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, yPos, 0]}>
-        {container === 'cuboid' ? (
-          <planeGeometry args={[4.46, 2.16]} />
+        {geometry.type === 'plane' ? (
+          <planeGeometry args={geometry.args} />
         ) : (
-          <circleGeometry args={[container === 'jar' ? 1.58 : 2.18, 64]} />
+          <circleGeometry args={geometry.args} />
         )}
         <meshStandardMaterial color={palette.ground} roughness={0.96} />
       </mesh>
@@ -208,7 +232,7 @@ function UploadPlane({ item }: { item: ProjectItem }) {
 }
 
 function Model3D({ item }: { item: ProjectItem }) {
-  const { scene } = useGLTF(item.modelUrl || "");
+  const { scene } = useGLTF(item.modelUrl || "", "/draco/");
 
   const { clonedScene, normalizedScale, centerOffset, bottomOffset } = useMemo(() => {
     const clone = scene.clone();
@@ -222,7 +246,7 @@ function Model3D({ item }: { item: ProjectItem }) {
     const box = new THREE.Box3().setFromObject(clone);
     const size = new THREE.Vector3();
     box.getSize(size);
-    
+
     // Normalize size to roughly 1 unit
     const maxDim = Math.max(size.x, size.y, size.z);
     const scale = maxDim > 0 ? 1 / maxDim : 1;
@@ -230,7 +254,7 @@ function Model3D({ item }: { item: ProjectItem }) {
     // Center offset (horizontal only) and Bottom offset (vertical)
     const center = new THREE.Vector3();
     box.getCenter(center);
-    
+
     return {
       clonedScene: clone,
       normalizedScale: scale,
@@ -246,6 +270,44 @@ function Model3D({ item }: { item: ProjectItem }) {
       </group>
     </group>
   );
+}
+
+useGLTF.setDecoderPath("/draco/");
+useGLTF.preload("/assets/models/piano.glb", "/draco/");
+
+function ErrorFallback({ scale }: { scale: number }) {
+  return (
+    <mesh position={[0, 0.5 * scale, 0]}>
+      <boxGeometry args={[0.8 * scale, 0.8 * scale, 0.8 * scale]} />
+      <meshStandardMaterial color="#ff4444" wireframe />
+    </mesh>
+  );
+}
+
+function SafeAssetLoader({ url, scale, children }: { url?: string, scale: number, children: ReactNode }) {
+  const [isValid, setIsValid] = useState<boolean | null>(() => {
+    if (!url || !url.startsWith("blob:")) {
+      return true;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (!url || !url.startsWith("blob:")) {
+      return;
+    }
+    fetch(url)
+      .then((res) => setIsValid(res.ok))
+      .catch(() => setIsValid(false));
+  }, [url]);
+
+  if (isValid === false) {
+    return <ErrorFallback scale={scale} />;
+  }
+  if (isValid === null) {
+    return null;
+  }
+  return <>{children}</>;
 }
 
 function ItemMesh({ item }: { item: ProjectItem }) {
@@ -274,11 +336,19 @@ function ItemMesh({ item }: { item: ProjectItem }) {
   }
 
   if (item.kind === "upload-plane" && item.previewUrl) {
-    return <UploadPlane item={item} />;
+    return (
+      <SafeAssetLoader url={item.previewUrl} scale={item.scale}>
+        <UploadPlane item={item} />
+      </SafeAssetLoader>
+    );
   }
 
   if (item.kind === "model-3d") {
-    return <Model3D item={item} />;
+    return (
+      <SafeAssetLoader url={item.modelUrl} scale={item.scale}>
+        <Model3D item={item} />
+      </SafeAssetLoader>
+    );
   }
 
   return <Tree {...item} />;
@@ -292,6 +362,7 @@ function SceneItemNode({
   transformSpace,
   snapEnabled,
   updateItemTransform,
+  constrainItemPosition,
   container,
 }: {
   item: ProjectItem;
@@ -301,50 +372,99 @@ function SceneItemNode({
   transformSpace: "local" | "world";
   snapEnabled: boolean;
   updateItemTransform: (id: string, position: [number, number, number], rotation: [number, number, number], scale3?: [number, number, number]) => void;
+  constrainItemPosition: (id: string, position: [number, number, number]) => void;
   container: ContainerKey;
 }) {
   const groupRef = useRef<THREE.Group>(null!);
+  const needsBoundsCheckRef = useRef(true);
+  const isDraggingRef = useRef(false);
 
   useLayoutEffect(() => {
-    if (groupRef.current) {
-      groupRef.current.position.set(...item.position);
-      groupRef.current.rotation.set(...item.rotation);
-      if (item.scale3) {
-        groupRef.current.scale.set(...item.scale3);
-      } else {
-        groupRef.current.scale.set(1, 1, 1);
-      }
-      groupRef.current.updateMatrix();
-      groupRef.current.updateMatrixWorld(true);
-    }
+    if (!groupRef.current) return;
+    // 拖动期间由 TransformControls 直接控制对象，避免被 store 的旧值覆盖
+    if (isDraggingRef.current) return;
+    const group = groupRef.current;
+
+    group.position.set(item.position[0], item.position[1], item.position[2]);
+    group.rotation.set(item.rotation[0], item.rotation[1], item.rotation[2]);
+
+    const scaleArr = item.scale3 || [1, 1, 1];
+    group.scale.set(scaleArr[0], scaleArr[1], scaleArr[2]);
+
+    group.updateMatrix();
+    group.updateMatrixWorld(true);
   }, [
-    item.position[0], item.position[1], item.position[2],
-    item.rotation[0], item.rotation[1], item.rotation[2],
-    item.scale3?.[0], item.scale3?.[1], item.scale3?.[2]
+    item.position,
+    item.rotation,
+    item.scale3
   ]);
+
+  useEffect(() => {
+    needsBoundsCheckRef.current = true;
+  }, [item.position, item.rotation, item.scale, item.scale3, container]);
+
+  useFrame(() => {
+    // 拖动期间不做边界检查，避免与 TransformControls 抢位置导致卡住
+    if (isDraggingRef.current) return;
+    if (!needsBoundsCheckRef.current || !groupRef.current) return;
+
+    groupRef.current.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(groupRef.current);
+    if (box.isEmpty()) return;
+
+    needsBoundsCheckRef.current = false;
+
+    const { x, z, clamped, oversized } = clampBoundingBoxToContainer(
+      container,
+      box.min.x,
+      box.max.x,
+      box.min.z,
+      box.max.z,
+      item.position[0],
+      item.position[2]
+    );
+
+    if (oversized) {
+      window.dispatchEvent(new CustomEvent('studio-toast', { detail: '模型尺寸超出容器范围' }));
+    }
+
+    if (
+      clamped &&
+      (Math.abs(item.position[0] - x) > 0.001 || Math.abs(item.position[2] - z) > 0.001)
+    ) {
+      constrainItemPosition(item.id, [x, item.position[1], z]);
+    }
+  });
 
   return (
     <>
       <group
         ref={groupRef}
-        position={item.position}
-        rotation={item.rotation}
-        scale={item.scale3 || [1, 1, 1]}
-        onClick={(event) => {
-          event.stopPropagation();
+        onClick={(e) => {
+          e.stopPropagation();
           onSelect(item.id);
         }}
         onPointerOver={(e) => {
           e.stopPropagation();
           document.body.style.cursor = "pointer";
         }}
-        onPointerOut={() => {
+        onPointerOut={(e) => {
+          e.stopPropagation();
           document.body.style.cursor = "auto";
         }}
       >
-        <Suspense fallback={null}>
-          <ItemMesh item={item} />
-        </Suspense>
+        <ItemErrorBoundary
+          fallback={
+            <mesh position={[0, 0.5, 0]}>
+              <boxGeometry args={[0.8, 0.8, 0.8]} />
+              <meshStandardMaterial color="#ff4444" wireframe />
+            </mesh>
+          }
+        >
+          <Suspense fallback={null}>
+            <ItemMesh item={item} />
+          </Suspense>
+        </ItemErrorBoundary>
         {isSelected ? (
           <mesh position={[0, getContainerFloorY(container) - item.position[1] + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[0.42, 0.52, 48]} />
@@ -360,8 +480,13 @@ function SceneItemNode({
           space={transformSpace}
           rotationSnap={snapEnabled ? Math.PI / 12 : undefined}
           translationSnap={snapEnabled ? 0.1 : undefined}
-          onMouseUp={(e: any) => {
-            const object = e?.target?.object;
+          onMouseDown={() => {
+            isDraggingRef.current = true;
+          }}
+          onMouseUp={(e) => {
+            const object = (e as unknown as { target: { object: THREE.Object3D } })?.target?.object;
+            // 先清除拖动标记，这样随 store 更新触发的 useLayoutEffect 才会用新值而不是被跳过
+            isDraggingRef.current = false;
             if (object) {
               updateItemTransform(
                 item.id,
@@ -388,9 +513,22 @@ export function SceneItems({
   snapEnabled = false,
 }: SceneItemsProps) {
   const updateItemTransform = useStudioStore((state) => state.updateItemTransform);
+  const constrainItemPosition = useStudioStore((state) => state.constrainItemPosition);
 
   return (
-    <group>
+    <group
+      onPointerMissed={(e) => {
+        if (e.type === "click") {
+          onSelect(null);
+        }
+      }}
+      onClick={(e) => {
+        // 点击舞台中非模型区域（如绿布地板）时取消选择。
+        // 模型自身的 onClick 会调用 stopPropagation，不会走到这里。
+        e.stopPropagation();
+        onSelect(null);
+      }}
+    >
       <SeasonalFloor season={season} container={container} />
       {items.map((item) => (
         <SceneItemNode
@@ -402,16 +540,10 @@ export function SceneItems({
           transformSpace={transformSpace}
           snapEnabled={snapEnabled}
           updateItemTransform={updateItemTransform}
+          constrainItemPosition={constrainItemPosition}
           container={container}
         />
       ))}
-      <mesh onClick={() => onSelect(null)} visible={false} position={[0, 0, 0]}>
-        <boxGeometry args={[20, 20, 20]} />
-        <meshBasicMaterial transparent opacity={0} />
-      </mesh>
     </group>
   );
 }
-
-
-

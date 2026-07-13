@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   Float,
@@ -169,11 +169,10 @@ export function SceneCanvas({
 
   return (
     <div
-      className="relative h-full w-full min-h-[460px] overflow-hidden rounded-[38px] border border-white/40 shadow-[0_40px_120px_rgba(18,18,28,0.18)] backdrop-blur-xl"
+      className="absolute inset-0 h-full w-full"
       style={{
         background: `radial-gradient(circle at 50% 18%, ${seasonBackground?.glow}, transparent 42%),
-          radial-gradient(circle at 18% 24%, rgba(255,255,255,0.68), transparent 24%),
-          linear-gradient(135deg, ${seasonBackground?.primary}, ${seasonBackground?.secondary})`,
+          linear-gradient(180deg, ${seasonBackground?.primary}, ${seasonBackground?.secondary})`,
       }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.45),transparent_38%),radial-gradient(circle_at_bottom,rgba(255,255,255,0.06),transparent_42%)]" />
@@ -181,7 +180,9 @@ export function SceneCanvas({
         shadows
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         dpr={[1, 1.6]}
-        className="h-full w-full"
+        className="!absolute inset-0 !h-full !w-full"
+        style={{ pointerEvents: "auto" }}
+        onPointerMissed={() => onSelect(null)}
       >
         <CanvasBridge 
           onCanvasReady={onCanvasReady} 
@@ -224,7 +225,6 @@ export function SceneCanvas({
         </EffectComposer>
       </Canvas>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/25 to-transparent" />
-      <div className="pointer-events-none absolute inset-0 rounded-[38px] border border-white/35" />
     </div>
   );
 }

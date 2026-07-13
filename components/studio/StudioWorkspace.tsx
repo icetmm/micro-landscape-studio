@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -31,6 +31,72 @@ function containerLabel(container: string) {
   return "半开放台座";
 }
 
+function UploadPromptDialog({
+  fileName,
+  defaultName,
+  onResolve,
+}: {
+  fileName: string;
+  defaultName: string;
+  onResolve: (name: string | null) => void;
+}) {
+  const [value, setValue] = useState(defaultName);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="w-[400px] rounded-[24px] border border-white/45 bg-white/80 p-6 shadow-2xl backdrop-blur-xl"
+      >
+        <h3 className="mb-2 text-lg font-semibold text-zinc-900">
+          为上传的文件命名
+        </h3>
+        <p className="mb-4 truncate text-sm text-zinc-500" title={fileName}>
+          {fileName}
+        </p>
+        <input
+          autoFocus
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onResolve(value);
+            } else if (e.key === "Escape") {
+              onResolve(null);
+            }
+          }}
+          className="mb-6 w-full rounded-[12px] border border-white/60 bg-white/50 px-4 py-2.5 text-sm text-zinc-900 outline-none ring-2 ring-transparent transition-all focus:border-zinc-300 focus:bg-white focus:ring-zinc-100"
+          onFocus={(e) => e.target.select()}
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => onResolve(null)}
+            className="rounded-[12px] px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/5"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => onResolve(value)}
+            className="rounded-[12px] bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+          >
+            确定
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+import { classifyUploadFile } from "@/lib/studio-upload";
+
 export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -40,6 +106,11 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
   const draggedAsset = useRef<LibraryAsset | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [uploadPrompt, setUploadPrompt] = useState<{
+    file: File;
+    defaultName: string;
+    resolve: (name: string | null) => void;
+  } | null>(null);
   const [transformMode, setTransformMode] = useState<"translate" | "rotate" | "scale">("translate");
   const [transformSpace, setTransformSpace] = useState<"local" | "world">("local");
   const [snapEnabled, setSnapEnabled] = useState(false);
@@ -99,8 +170,19 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
       }
     };
 
+    const handleStudioToast = (event: Event) => {
+      const customEvent = event as CustomEvent<string>;
+      if (customEvent.detail) {
+        showToast(customEvent.detail);
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("studio-toast", handleStudioToast);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("studio-toast", handleStudioToast);
+    };
   }, [activeProject.readOnly, handleUndo, removeSelectedItem, selectedItemId, showToast]);
 
   useEffect(() => {
@@ -140,22 +222,50 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
     useStudioStore.getState().updateProjectTitle(targetId, title);
   }, []);
 
-  const handleUploadFiles = useCallback((files: FileList | null) => {
+  const handleUpdateProjectIcon = useCallback((targetId: string, icon: string) => {
+    useStudioStore.getState().updateProjectIcon(targetId, icon);
+  }, []);
+
+  const handleUploadFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
 
-    const createdAssets: LibraryAsset[] = Array.from(files).map((file) => ({
-      id: `upload-${Math.random().toString(36).slice(2, 9)}`,
-      name: file.name.replace(/\.[^.]+$/, ""),
-      category: "uploaded",
-      kind: "upload-plane",
-      color: "#ffffff",
-      accent: "#efe9da",
-      scale: 0.95,
-      previewUrl: URL.createObjectURL(file),
-    }));
+    let successCount = 0;
+    let skipCount = 0;
+    const createdAssets: LibraryAsset[] = [];
 
-    addUploadedAssets(createdAssets);
-  }, [addUploadedAssets]);
+    for (const file of Array.from(files)) {
+      const defaultName = file.name.replace(/\.[^.]+$/, "");
+      
+      const customName = await new Promise<string | null>((resolve) => {
+        setUploadPrompt({ file, defaultName, resolve });
+      });
+
+      setUploadPrompt(null);
+
+      if (customName === null) {
+        // 用户取消了当前文件的上传
+        continue;
+      }
+
+      const asset = classifyUploadFile(file, customName || defaultName);
+      if (asset) {
+        createdAssets.push(asset);
+        successCount++;
+      } else {
+        skipCount++;
+      }
+    }
+
+    if (createdAssets.length > 0) {
+      addUploadedAssets(createdAssets);
+    }
+
+    if (skipCount > 0) {
+      showToast(`已添加 ${successCount} 个文件，跳过了 ${skipCount} 个不支持的文件`);
+    } else if (successCount > 0) {
+      showToast(`成功添加 ${successCount} 个文件`);
+    }
+  }, [addUploadedAssets, showToast]);
 
   const handleDropAsset = useCallback((clientX: number, clientY: number, element: HTMLElement) => {
     if (!draggedAsset.current) return;
@@ -231,7 +341,7 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
           linear-gradient(135deg, ${currentSeason?.background.primary}, ${currentSeason?.background.secondary})`,
       }}
     >
-      <div className="mx-auto grid max-w-[1600px] items-stretch gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+      <div className="mx-auto grid max-w-[1700px] h-[calc(100vh-32px)] md:h-[calc(100vh-48px)] items-stretch gap-5 xl:grid-cols-[340px_minmax(0,1fr)_340px]">
         <StudioSidebar
           activeProjectId={activeProjectId}
           activeProject={activeProject}
@@ -244,45 +354,46 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
           onCloneProject={handleCloneProject}
           onDeleteProject={handleDeleteProject}
           onUpdateProjectTitle={handleUpdateProjectTitle}
+          onUpdateProjectIcon={handleUpdateProjectIcon}
         />
 
-        <main className="flex h-full flex-col gap-4 rounded-[40px] border border-white/45 bg-white/30 p-4 shadow-[0_40px_120px_rgba(17,20,31,0.12)] backdrop-blur-[22px]">
-          <motion.header
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col gap-4 rounded-[32px] border border-white/45 bg-white/58 p-5 shadow-[0_22px_54px_rgba(17,20,31,0.08)] md:flex-row md:items-center md:justify-between"
-          >
+        <div className="flex min-w-0 flex-col gap-4 h-full">
+          <main className="flex flex-1 flex-col gap-3 rounded-[40px] border border-white/45 bg-white/30 p-4 shadow-[0_40px_120px_rgba(17,20,31,0.12)] backdrop-blur-[22px]">
+            <header className="flex shrink-0 items-center justify-between gap-4 rounded-[24px] border border-white/50 bg-white/44 px-4 py-3 shadow-sm">
             <div className="flex items-center gap-4">
               <Link
                 href="/"
-                className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white text-zinc-800 shadow-[0_10px_24px_rgba(0,0,0,0.08)] transition hover:-translate-y-0.5"
+                title="返回主页"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/60 text-zinc-700 transition-all hover:bg-white hover:text-zinc-950 shadow-sm"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft className="h-5 w-5" />
               </Link>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500">Creative Studio</p>
-                <h1 className="mt-1 text-3xl font-semibold text-zinc-900">{activeProject.title}</h1>
-                <p className="mt-2 max-w-2xl text-sm text-zinc-600">{currentSeason?.subtitle}</p>
+                <h1 className="text-[10px] font-bold tracking-[0.2em] text-zinc-500">CREATIVE STUDIO</h1>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className="text-xl leading-none">
+                    {activeProject.icon || currentSeason?.emoji}
+                  </span>
+                  <h2 className="text-lg font-semibold text-zinc-900">{activeProject.title}</h2>
+                </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-full border border-white/70 bg-white/68 px-4 py-2 text-xs text-zinc-600">
-                背景联动: {activeProject.backgroundLabel}
+
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex items-center gap-2 rounded-full bg-white/60 border border-white/40 px-4 py-2 text-xs font-medium text-zinc-600 backdrop-blur-md">
+                <span>容器: {containerLabel(activeProject.container)}</span>
               </div>
-              <div className="rounded-full border border-white/70 bg-white/68 px-4 py-2 text-xs text-zinc-600">
-                容器: {containerLabel(activeProject.container)}
-              </div>
-              <div className="rounded-full border border-white/70 bg-white/68 px-4 py-2 text-xs text-zinc-600">
-                主题: {activeProject.themeMode === "dark" ? "深色" : "浅色"}
+              <div className="flex items-center gap-2 rounded-full bg-white/60 border border-white/40 px-4 py-2 text-xs font-medium text-zinc-600 backdrop-blur-md">
+                <span>主题: {activeProject.themeMode === "dark" ? "深色" : "浅色"}</span>
               </div>
             </div>
-          </motion.header>
+          </header>
 
           <section className="flex flex-1 flex-col gap-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-1 flex-col rounded-[36px] border border-white/45 bg-white/34 p-4 shadow-[0_30px_72px_rgba(17,20,31,0.1)] backdrop-blur-2xl"
+              className="relative flex flex-1 flex-col overflow-hidden rounded-[36px] border border-white/45 bg-white/34 p-0 shadow-[0_30px_72px_rgba(17,20,31,0.1)] backdrop-blur-2xl"
             >
               <div
                 onDragOver={(event) => {
@@ -292,7 +403,7 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
                   event.preventDefault();
                   handleDropAsset(event.clientX, event.clientY, event.currentTarget);
                 }}
-                className="relative min-h-[460px] w-full flex-1"
+                className="absolute inset-0"
               >
                 <SceneCanvas
                   season={activeProject.templateSeason}
@@ -313,32 +424,24 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
                   snapEnabled={snapEnabled}
                 />
 
-                <div className="pointer-events-none absolute right-6 top-6 flex">
-                  <button
-                    type="button"
-                    onClick={handleExport}
-                    title="保存图片"
-                    className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-md bg-white/70 text-zinc-800 shadow-[0_8px_32px_rgba(0,0,0,0.12)] ring-1 ring-white/50 backdrop-blur-xl transition-all hover:scale-105 hover:bg-white/85 active:scale-95"
-                  >
-                    <Download className="h-5 w-5" />
-                  </button>
-                </div>
-
-                <div className="pointer-events-none absolute inset-x-5 top-5 flex items-center justify-between">
-                  <div className="rounded-full border border-white/55 bg-black/35 px-4 py-2 text-xs text-white/90 backdrop-blur">
-                    左右拖动旋转，滚轮缩放
-                  </div>
-                </div>
                 <AnimatePresence>
                   {toastMessage && (
                     <motion.div
-                      initial={{ opacity: 0, y: -20, x: "-50%" }}
-                      animate={{ opacity: 1, y: 0, x: "-50%" }}
-                      exit={{ opacity: 0, y: -20, x: "-50%" }}
-                      className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[20px] bg-black/70 px-6 py-3 text-sm font-medium text-white shadow-xl backdrop-blur-md"
+                      initial={{ opacity: 0, y: "-60%", x: "-50%" }}
+                      animate={{ opacity: 1, y: "-50%", x: "-50%" }}
+                      exit={{ opacity: 0, y: "-60%", x: "-50%" }}
+                      className="pointer-events-none absolute left-1/2 top-1/2 rounded-[20px] bg-black/70 px-6 py-3 text-sm font-medium text-white shadow-xl backdrop-blur-md"
                     >
                       {toastMessage}
                     </motion.div>
+                  )}
+                  {uploadPrompt && (
+                    <UploadPromptDialog
+                      key="upload-prompt"
+                      fileName={uploadPrompt.file.name}
+                      defaultName={uploadPrompt.defaultName}
+                      onResolve={uploadPrompt.resolve}
+                    />
                   )}
                 </AnimatePresence>
               </div>
@@ -346,8 +449,18 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
           </section>
         </main>
 
-        <aside className="flex h-full flex-col self-start">
-          <div className="custom-scrollbar overflow-y-auto rounded-[40px] border border-white/45 bg-white/52 p-4 shadow-[0_24px_60px_rgba(17,20,31,0.12)] backdrop-blur-2xl">
+        <StudioAssetBrowser
+            libraryAssets={libraryAssets}
+            uploadedAssets={uploadedAssets}
+            onUploadFiles={handleUploadFiles}
+            onDragAsset={(asset) => {
+              draggedAsset.current = asset;
+            }}
+          />
+        </div>
+
+        <aside className="flex h-full flex-col">
+          <div className="custom-scrollbar flex flex-1 flex-col overflow-y-auto rounded-[32px] border border-white/45 bg-white/52 p-3 shadow-[0_24px_60px_rgba(17,20,31,0.12)] backdrop-blur-2xl">
             <StudioControls
               themeMode={activeProject.themeMode}
               light={light}
@@ -369,18 +482,10 @@ export function StudioWorkspace({ projectId }: StudioWorkspaceProps) {
               onReset={handleReset}
               onDelete={handleDelete}
               onUndo={handleUndo}
+              onExport={handleExport}
             />
           </div>
         </aside>
-
-        <StudioAssetBrowser
-          libraryAssets={libraryAssets}
-          uploadedAssets={uploadedAssets}
-          onUploadFiles={handleUploadFiles}
-          onDragAsset={(asset) => {
-            draggedAsset.current = asset;
-          }}
-        />
       </div>
     </div>
   );
